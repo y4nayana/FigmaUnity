@@ -1,6 +1,7 @@
-﻿using DA_Assets.FCU.Extensions;
-using DA_Assets.Shared;
-using DA_Assets.Shared.Extensions;
+﻿using DA_Assets.DAI;
+using DA_Assets.Extensions;
+using DA_Assets.FCU.Extensions;
+using DA_Assets.Logging;
 using System;
 using System.Collections.Generic;
 using UnityEditor;
@@ -12,17 +13,20 @@ using UnityEngine;
 namespace DA_Assets.FCU
 {
     [CustomEditor(typeof(FigmaConverterUnity)), CanEditMultipleObjects]
-    internal class FcuEditor : DaiEditor<FcuEditor, FigmaConverterUnity>
+    internal class FcuEditor : DAEditor<FcuEditor, FigmaConverterUnity, BlackInspector>
     {
         public override void OnShow()
         {
-            monoBeh.DelegateHolder.ShowDifferenceChecker = ShowDifferenceChecker;
+            base.OnShow();
 
+            monoBeh.DelegateHolder.SetSpriteRects = SpriteEditorUtility.SetSpriteRects;
+            monoBeh.DelegateHolder.ShowDifferenceChecker = ShowDifferenceChecker;
+            monoBeh.DelegateHolder.UpdateScrollContent = this.FrameList.UpdateScrollContent;
+            monoBeh.DelegateHolder.UpdateScrollContent();
             monoBeh.DelegateHolder.GetGameViewSize = GameViewUtils.GetGameViewSize;
             monoBeh.DelegateHolder.SetGameViewSize = GameViewUtils.SetGameViewSize;
 
-            monoBeh.FigmaSession.TryRestoreSession();
-            monoBeh.ProjectCacher.TryRestoreProjectFromCache(monoBeh.Settings.MainSettings.ProjectUrl);
+            _ = monoBeh.Authorizer.TryRestoreSession();
         }
 
         private void ShowDifferenceChecker(PreImportInput data, Action<PreImportOutput> callback)
@@ -36,7 +40,6 @@ namespace DA_Assets.FCU
             gui.DrawGroup(new Group
             {
                 GroupType = GroupType.Vertical,
-                DarkBg = true,
                 Body = () => base.OnInspectorGUI()
             });
         }
@@ -49,7 +52,7 @@ namespace DA_Assets.FCU
             }
             else
             {
-                DrawGUI(GuiStyle.Background);
+                DrawGUI(gui.ColoredStyle.Background);
             }
         }
 
@@ -58,7 +61,7 @@ namespace DA_Assets.FCU
             gui.DrawGroup(new Group
             {
                 GroupType = GroupType.Vertical,
-                Style = GuiStyle.Background,
+                Style = gui.ColoredStyle.Background,
                 Body = () =>
                 {
                     gui.TopProgressBar(monoBeh.RequestSender.PbarProgress);
@@ -72,14 +75,14 @@ namespace DA_Assets.FCU
 
                             gui.Space15();
 
-                            if (gui.SquareButton30x30(new GUIContent(gui.Resources.IconOpen, FcuLocKey.tooltip_open_fcu_window.Localize())))
+                            if (gui.SquareButton30x30(new GUIContent(gui.Data.Resources.IconOpen, FcuLocKey.tooltip_open_fcu_window.Localize())))
                             {
                                 this.SettingsWindow.Show();
                             }
 
                             gui.Space5();
 
-                            if (gui.SquareButton30x30(new GUIContent(gui.Resources.IconExpandWindow, FcuLocKey.tooltip_change_window_mode.Localize())))
+                            if (gui.SquareButton30x30(new GUIContent(gui.Data.Resources.IconExpandWindow, FcuLocKey.tooltip_change_window_mode.Localize())))
                             {
                                 if (monoBeh.Settings.MainSettings.WindowMode)
                                 {
@@ -92,7 +95,7 @@ namespace DA_Assets.FCU
             });
         }
 
-        public void DrawGUI(GuiStyle customStyle)
+        public void DrawGUI(GUIStyle customStyle)
         {
             gui.DrawGroup(new Group
             {
@@ -109,7 +112,7 @@ namespace DA_Assets.FCU
                         GroupType = GroupType.Horizontal,
                         Body = () =>
                         {
-                            monoBeh.Settings.MainSettings.ProjectUrl = gui.BigTextField(monoBeh.Settings.MainSettings.ProjectUrl);
+                            monoBeh.Settings.MainSettings.ProjectUrl = gui.BigTextField(monoBeh.Settings.MainSettings.ProjectUrl, null);
 
                             gui.Space5();
 
@@ -117,25 +120,25 @@ namespace DA_Assets.FCU
 
                             if (monoBeh.Settings.MainSettings.WindowMode)
                             {
-                                gr.Style = GuiStyle.Group5Buttons;
+                                gr.Style = gui.ColoredStyle.Group5Buttons;
                             }
                             else
                             {
-                                gr.Style = GuiStyle.Group6Buttons;
+                                gr.Style = gui.ColoredStyle.Group6Buttons;
                             }
 
                             gr.GroupType = GroupType.Horizontal;
                             gr.Body = () =>
                             {
-                                if (gui.SquareButton30x30(new GUIContent(gui.Resources.ImgViewRecent, FcuLocKey.tooltip_recent_projects.Localize())))
+                                if (gui.SquareButton30x30(new GUIContent(gui.Data.Resources.ImgViewRecent, FcuLocKey.tooltip_recent_projects.Localize())))
                                 {
                                     ShowRecentProjectsPopup_OnClick();
                                 }
 
                                 gui.Space5();
-                                if (gui.SquareButton30x30(new GUIContent(gui.Resources.IconDownload, FcuLocKey.tooltip_download_project.Localize())))
+                                if (gui.SquareButton30x30(new GUIContent(gui.Data.Resources.IconDownload, FcuLocKey.tooltip_download_project.Localize())))
                                 {
-                                    if (monoBeh.FigmaSession.IsAuthed() == false)
+                                    if (monoBeh.Authorizer.IsAuthed() == false)
                                     {
                                         DALogger.Log(FcuLocKey.log_not_authorized.Localize());
                                     }
@@ -150,29 +153,28 @@ namespace DA_Assets.FCU
                                 }
 
                                 gui.Space5();
-                                if (gui.SquareButton30x30(new GUIContent(gui.Resources.IconImport, FcuLocKey.tooltip_import_frames.Localize())))
+                                if (gui.SquareButton30x30(new GUIContent(gui.Data.Resources.IconImport, FcuLocKey.tooltip_import_frames.Localize())))
                                 {
                                     monoBeh.EventHandlers.ImportSelectedFrames_OnClick();
                                 }
 
                                 gui.Space5();
-                                if (gui.SquareButton30x30(new GUIContent(gui.Resources.IconStop, FcuLocKey.tooltip_stop_import.Localize())))
+                                if (gui.SquareButton30x30(new GUIContent(gui.Data.Resources.IconStop, FcuLocKey.tooltip_stop_import.Localize())))
                                 {
                                     monoBeh.EventHandlers.StopImport_OnClick();
-                                    DALogger.Log(FcuLocKey.label_import_stoped_manually.Localize());
                                 }
 
                                 if (monoBeh.Settings.MainSettings.WindowMode == false)
                                 {
                                     gui.Space5();
-                                    if (gui.SquareButton30x30(new GUIContent(gui.Resources.IconSettings, FcuLocKey.tooltip_open_settings_window.Localize())))
+                                    if (gui.SquareButton30x30(new GUIContent(gui.Data.Resources.IconSettings, FcuLocKey.tooltip_open_settings_window.Localize())))
                                     {
                                         this.SettingsWindow.Show();
                                     }
                                 }
 
                                 gui.Space5();
-                                if (gui.SquareButton30x30(new GUIContent(gui.Resources.IconExpandWindow, FcuLocKey.tooltip_change_window_mode.Localize())))
+                                if (gui.SquareButton30x30(new GUIContent(gui.Data.Resources.IconExpandWindow, FcuLocKey.tooltip_change_window_mode.Localize())))
                                 {
                                     if (monoBeh.Settings.MainSettings.WindowMode)
                                     {
@@ -191,9 +193,9 @@ namespace DA_Assets.FCU
                         }
                     });
 
-                    gui.Space6();
+                    gui.Space5();
 
-                    if (monoBeh.CurrentProject.FigmaProject.IsProjectEmpty() == false /*&& monoBeh.InspectorDrawer.SelectableFrames.IsEmpty() == false*/)
+                    if (!monoBeh.InspectorDrawer.SelectableDocument.IsProjectEmpty())
                     {
                         this.FrameList.Draw();
                     }
@@ -202,9 +204,10 @@ namespace DA_Assets.FCU
                 }
             });
         }
+
         private void ShowRecentProjectsPopup_OnClick()
         {
-            List<CacheMeta> recentProjects = monoBeh.ProjectCacher.GetAll();
+            List<RecentProject> recentProjects = monoBeh.ProjectCacher.GetRecentProjects();
 
             List<GUIContent> options = new List<GUIContent>();
 
@@ -214,7 +217,7 @@ namespace DA_Assets.FCU
             }
             else
             {
-                foreach (CacheMeta project in recentProjects)
+                foreach (RecentProject project in recentProjects)
                 {
                     options.Add(new GUIContent(project.Name));
                 }
@@ -222,23 +225,23 @@ namespace DA_Assets.FCU
 
             EditorUtility.DisplayCustomMenu(new Rect(11, 150, 0, 0), options.ToArray(), -1, (userData, ops, selected) =>
             {
-                monoBeh.Settings.MainSettings.ProjectUrl = recentProjects[selected].Url;
-                monoBeh.ProjectCacher.TryRestoreProjectFromCache(recentProjects[selected].Url);
+                RecentProject recentProject = recentProjects[selected];
+                monoBeh.Settings.MainSettings.ProjectUrl = recentProject.Url;
+                monoBeh.EventHandlers.DownloadProject_OnClick();
             }, null);
         }
 
+        internal DifferenceCheckerWindow DifferenceCheckerWindow =>
+            DifferenceCheckerWindow.GetInstance(this, monoBeh, new Vector2(900, 600), false);
 
-        internal PreImportWindow DifferenceCheckerWindow => 
-            PreImportWindow.GetInstance(this, monoBeh, new Vector2(900, 600), false);
-
-        internal FcuSettingsWindow SettingsWindow => 
+        internal FcuSettingsWindow SettingsWindow =>
             FcuSettingsWindow.GetInstance(this, monoBeh, new Vector2(800, 600), false);
 
-        private HeaderSection headerSection;
-        internal HeaderSection Header => monoBeh.Bind(ref headerSection, this);
+        [SerializeField] HeaderSection headerSection;
+        internal HeaderSection Header => monoBeh.Link(ref headerSection, this);
 
-        private FramesSection frameListSection;
-        internal FramesSection FrameList => monoBeh.Bind(ref frameListSection, this);
+        [SerializeField] FramesSection frameListSection;
+        internal FramesSection FrameList => monoBeh.Link(ref frameListSection, this);
     }
 
     public enum HamburgerMenuId

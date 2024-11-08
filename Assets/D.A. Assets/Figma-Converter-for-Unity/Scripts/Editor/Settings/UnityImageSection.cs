@@ -1,21 +1,11 @@
-﻿using DA_Assets.FCU.Extensions;
-using DA_Assets.Shared;
-using System.Linq;
-using UnityEditor;
+﻿using DA_Assets.DAI;
+using DA_Assets.FCU.Extensions;
 using UnityEngine;
 
 namespace DA_Assets.FCU
 {
-    internal class UnityImageSection : ScriptableObjectBinder<FcuSettingsWindow, FigmaConverterUnity>
+    internal class UnityImageSection : MonoBehaviourLinkerEditor<FcuSettingsWindow, FigmaConverterUnity, BlackInspector>
     {
-        private string[] shaderNames;
-        private int selectedIndex = -1;
-
-        public override void Init()
-        {
-            shaderNames = ShaderUtil.GetAllShaderInfo().Select(info => info.name).ToArray();
-        }
-
         public void Draw()
         {
             gui.SectionHeader(FcuLocKey.label_unity_image_settings.Localize());
@@ -27,17 +17,25 @@ namespace DA_Assets.FCU
                     monoBeh.Settings.UnityImageSettings.Type);
             }
 
+            gui.Space10();
+
             monoBeh.Settings.UnityImageSettings.RaycastTarget = gui.Toggle(new GUIContent(FcuLocKey.label_raycast_target.Localize(), ""),
                 monoBeh.Settings.UnityImageSettings.RaycastTarget);
 
             if (monoBeh.UsingRawImage() == false)
             {
+                gui.Space10();
+
                 monoBeh.Settings.UnityImageSettings.PreserveAspect = gui.Toggle(new GUIContent(FcuLocKey.label_preserve_aspect.Localize(), ""),
                     monoBeh.Settings.UnityImageSettings.PreserveAspect);
             }
 
+            gui.Space10();
+
             monoBeh.Settings.UnityImageSettings.RaycastPadding = gui.Vector4Field(new GUIContent(FcuLocKey.label_raycast_padding.Localize(), ""),
                 monoBeh.Settings.UnityImageSettings.RaycastPadding);
+
+            gui.Space10();
 
             monoBeh.Settings.UnityImageSettings.Maskable = gui.Toggle(new GUIContent(FcuLocKey.label_maskable.Localize(), ""),
                 monoBeh.Settings.UnityImageSettings.Maskable);

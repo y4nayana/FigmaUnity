@@ -1,5 +1,6 @@
-﻿using DA_Assets.FCU.Extensions;
-using DA_Assets.Shared;
+﻿using DA_Assets.DAI;
+using DA_Assets.FCU.Extensions;
+using DA_Assets.Tools;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -8,45 +9,63 @@ using UnityEngine;
 
 namespace DA_Assets.FCU
 {
-
-    internal class FcuSettingsWindow : DAInspectorWindow<FcuSettingsWindow, FcuEditor, FigmaConverterUnity>
+    internal class FcuSettingsWindow : LinkedEditorWindow<FcuSettingsWindow, FcuEditor, FigmaConverterUnity, BlackInspector>
     {
         private List<UITab> _tabs = new List<UITab>();
 
         private int _selectedTab = 0;
-
+        AssetVersion _currentVersion;
         public override void OnShow()
         {
             CreateTabs();
+
+            _currentVersion = UpdateChecker.GetCurrentVersionInfo(AssetType.fcu, FcuConfig.Instance.ProductVersion);
         }
 
         public void CreateTabs()
-        {         
+        {
             _tabs.Clear();
 
             if (monoBeh.Settings.MainSettings.WindowMode)
             {
-                UITab assetTab = new UITab(FcuLocKey.label_asset.Localize(), null, this.AssetTab.Draw);
+                UITab assetTab = new UITab(FcuLocKey.label_asset.Localize(), null, this.MainTab.Draw);
                 _tabs.Add(assetTab);
             }
 
-            UITab mainSettingTab = new UITab(FcuLocKey.label_main_settings.Localize(), null, this.MainSettingsTab.Draw, 150);
+            UITab mainSettingTab = new UITab(FcuLocKey.label_main_settings.Localize(), null, this.MainSettingsTab.Draw);
             _tabs.Add(mainSettingTab);
 
-            if (monoBeh.IsUGUI())
+            UITab authTab = new UITab(FcuLocKey.label_figma_auth.Localize(), FcuLocKey.tooltip_figma_auth.Localize(), this.AuthorizerTab.Draw);
+            _tabs.Add(authTab);
+
+            UITab imageSpritesTab = new UITab(FcuLocKey.label_images_and_sprites_tab.Localize(), FcuLocKey.tooltip_images_and_sprites_tab.Localize(), this.ImageSpritesTab.Draw);
+            _tabs.Add(imageSpritesTab);
+
+            UITab textFontTab = new UITab(FcuLocKey.label_text_and_fonts.Localize(), FcuLocKey.tooltip_text_and_fonts.Localize(), this.TextFontsTab.Draw);
+            _tabs.Add(textFontTab);
+
+            if (monoBeh.IsUGUI() || monoBeh.IsNova() || monoBeh.IsDebug())
             {
-                UITab unityComponentsTab = new UITab(FcuLocKey.label_unity_comp.Localize(), FcuLocKey.tooltip_unity_comp.Localize(), this.UnityComponentsTab.Draw);
-                _tabs.Add(unityComponentsTab);
+                UITab buttonsTab = new UITab(FcuLocKey.label_buttons_tab.Localize(), FcuLocKey.tooltip_buttons_tab.Localize(), this.ButtonsTab.Draw);
+                _tabs.Add(buttonsTab);
             }
 
+            UITab uitkTab = new UITab(FcuLocKey.label_ui_toolkit_tab.Localize(), FcuLocKey.tooltip_ui_toolkit_tab.Localize(), this.UITK_Tab.Draw);
+            _tabs.Add(uitkTab);
 
-            UITab fontsTab = new UITab(FcuLocKey.fonts_settings.Localize(), null, this.FontsTab.Draw, 180);
-            _tabs.Add(fontsTab);
-
-            if (monoBeh.IsUGUI())
+            if (monoBeh.IsUGUI() || monoBeh.IsNova() || monoBeh.IsDebug())
             {
-                UITab prefabsTab = new UITab(FcuLocKey.label_prefabs.Localize(), null, this.PrefabSettingsTab.Draw, 180);
+                UITab prefabsTab = new UITab(FcuLocKey.label_prefabs.Localize(), null, this.PrefabsTab.Draw);
                 _tabs.Add(prefabsTab);
+            }
+
+            UITab locTab = new UITab(FcuLocKey.label_localization_settings.Localize(), null, this.LocalizationTab.Draw);
+            _tabs.Add(locTab);
+
+            if (monoBeh.IsUGUI() || monoBeh.IsDebug())
+            {
+                UITab shadowsTab = new UITab(FcuLocKey.label_shadows_tab.Localize(), FcuLocKey.tooltip_shadows_tab.Localize(), this.ShadowsTab.Draw);
+                _tabs.Add(shadowsTab);
             }
 
             //UITab scriptGeneratorTab = new UITab(FcuLocKey.label_script_generator.Localize(), FcuLocKey.tooltip_script_generator.Localize(), this.ScriptGeneratorTab.Draw);
@@ -55,10 +74,7 @@ namespace DA_Assets.FCU
             UITab importEventsTab = new UITab(FcuLocKey.label_import_events.Localize(), null, this.ImportEventsTab.Draw);
             _tabs.Add(importEventsTab);
 
-            UITab definesTab = new UITab(FcuLocKey.label_dependencies.Localize(), null, this.DependenciesTab.Draw);
-            _tabs.Add(definesTab);
-
-            UITab debugTools = new UITab(FcuLocKey.label_debug.Localize(), FcuLocKey.tooltip_debug_tools.Localize(), this.DebugToolsTab.Draw);
+            UITab debugTools = new UITab(FcuLocKey.label_debug.Localize(), FcuLocKey.tooltip_debug_tools.Localize(), this.DebugTab.Draw);
             _tabs.Add(debugTools);
 
             _tabs[_selectedTab].Selected = true;
@@ -86,6 +102,7 @@ namespace DA_Assets.FCU
                 Body = () =>
                 {
                     DrawMenu();
+                    gui.VerticalSeparator();
                     DrawTabContent();
                 }
             });
@@ -96,7 +113,7 @@ namespace DA_Assets.FCU
             gui.DrawGroup(new Group
             {
                 GroupType = GroupType.Vertical,
-                Style = GuiStyle.HamburgerTabsBg,
+                Style = gui.ColoredStyle.HamburgerTabsBg,
                 Options = new[] { GUILayout.Width(200) },
                 Scroll = true,
                 InstanceId = monoBeh.GetInstanceID(),
@@ -126,9 +143,20 @@ namespace DA_Assets.FCU
                         GroupType = GroupType.Horizontal,
                         Body = () =>
                         {
-                            //TODO: return
-                            //gui.Space10();
-                            //gui.Label10px(FcuLocKey.label_beta_version.Localize(), widthType: WidthType.Expand);
+                            gui.Space10();
+
+                            switch (_currentVersion.VersionType)
+                            {
+                                case VersionType.stable:
+                                    gui.Label10px(FcuLocKey.label_stable_version.Localize(), null, GUILayout.ExpandWidth(true));
+                                    break;
+                                case VersionType.beta:
+                                    gui.Label10px(FcuLocKey.label_beta_version.Localize(), null, GUILayout.ExpandWidth(true));
+                                    break;
+                                case VersionType.buggy:
+                                    gui.RedLinkLabel10px(new GUIContent(FcuLocKey.label_buggy_version.Localize()), GUILayout.ExpandWidth(true));
+                                    break;
+                            }
                         }
                     });
 
@@ -142,16 +170,15 @@ namespace DA_Assets.FCU
             gui.DrawGroup(new Group
             {
                 GroupType = GroupType.Vertical,
-                Style = GuiStyle.TabBg1,
+                Style = gui.ColoredStyle.TabBg1,
                 Scroll = true,
                 InstanceId = monoBeh.GetInstanceID(),
-                LabelWidth = _tabs[_selectedTab].LabelWidth,
                 Body = () =>
                 {
                     gui.DrawGroup(new Group
                     {
                         GroupType = GroupType.Vertical,
-                        Style = GuiStyle.TabBg2,
+                        Style = gui.ColoredStyle.TabBg2,
                         Body = () =>
                         {
                             _tabs[_selectedTab].Content.Invoke();
@@ -162,31 +189,43 @@ namespace DA_Assets.FCU
         }
 
 
-        private AssetTab assetTab;
-        internal AssetTab AssetTab => monoBeh.Bind(ref assetTab, this);
+        private MainTab mainTab;
+        internal MainTab MainTab => monoBeh.Link(ref mainTab, this);
 
-        private FontsTab fontsTab;
-        internal FontsTab FontsTab => monoBeh.Bind(ref fontsTab, this);
+        private LocalizationTab localizationTab;
+        internal LocalizationTab LocalizationTab => monoBeh.Link(ref localizationTab, this);
+
+        private ButtonsTab buttonsTab;
+        internal ButtonsTab ButtonsTab => monoBeh.Link(ref buttonsTab, this);
 
         private MainSettingsTab mainSettingsTab;
-        internal MainSettingsTab MainSettingsTab => monoBeh.Bind(ref mainSettingsTab, this);
+        internal MainSettingsTab MainSettingsTab => monoBeh.Link(ref mainSettingsTab, this);
 
         private ScriptGeneratorTab scriptGeneratorTab;
-        internal ScriptGeneratorTab ScriptGeneratorTab => monoBeh.Bind(ref scriptGeneratorTab, this);
+        internal ScriptGeneratorTab ScriptGeneratorTab => monoBeh.Link(ref scriptGeneratorTab, this);
 
-        private UnityComponentsTab unityComponentsTab;
-        internal UnityComponentsTab UnityComponentsTab => monoBeh.Bind(ref unityComponentsTab, this);
+        private AuthTab authorizerTab;
+        internal AuthTab AuthorizerTab => monoBeh.Link(ref authorizerTab, this);
+
+        private TextFontsTab textFontsTab;
+        internal TextFontsTab TextFontsTab => monoBeh.Link(ref textFontsTab, this);
+
+        private UITK_Tab uitkTab;
+        internal UITK_Tab UITK_Tab => monoBeh.Link(ref uitkTab, this);
+
+        private ImageSpritesTab imageSpritesTab;
+        internal ImageSpritesTab ImageSpritesTab => monoBeh.Link(ref imageSpritesTab, this);
+
+        private ShadowsTab shadowsTab;
+        internal ShadowsTab ShadowsTab => monoBeh.Link(ref shadowsTab, this);
 
         private ImportEventsTab importEventsTab;
-        internal ImportEventsTab ImportEventsTab => monoBeh.Bind(ref importEventsTab, this);
+        internal ImportEventsTab ImportEventsTab => monoBeh.Link(ref importEventsTab, this);
 
-        private DebugToolsTab debugToolsTab;
-        internal DebugToolsTab DebugToolsTab => monoBeh.Bind(ref debugToolsTab, this);
+        private DebugTab debugTab;
+        internal DebugTab DebugTab => monoBeh.Link(ref debugTab, this);
 
-        private DependenciesTab dependenciesTab;
-        internal DependenciesTab DependenciesTab => monoBeh.Bind(ref dependenciesTab, this);
-
-        private PrefabSettingsTab prefabSettingsTab;
-        internal PrefabSettingsTab PrefabSettingsTab => monoBeh.Bind(ref prefabSettingsTab, this);
+        private PrefabsTab prefabsTab;
+        internal PrefabsTab PrefabsTab => monoBeh.Link(ref prefabsTab, this);
     }
 }

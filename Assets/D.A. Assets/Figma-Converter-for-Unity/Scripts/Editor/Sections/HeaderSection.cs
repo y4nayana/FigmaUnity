@@ -1,17 +1,19 @@
-﻿using DA_Assets.FCU.Extensions;
-using DA_Assets.Shared;
-using DA_Assets.Shared.Extensions;
+﻿using DA_Assets.DAI;
+using DA_Assets.Extensions;
+using DA_Assets.FCU.Extensions;
+using DA_Assets.Tools;
 using System;
 using System.Linq;
 using UnityEngine;
 
 namespace DA_Assets.FCU
 {
-    internal class HeaderSection : ScriptableObjectBinder<FcuEditor, FigmaConverterUnity>
+    [Serializable]  
+    internal class HeaderSection : MonoBehaviourLinkerEditor<FcuEditor, FigmaConverterUnity, BlackInspector>
     {
         private void DrawStar()
         {
-            GUILayout.Box(gui.Resources.ImgStar, gui.GetStyle(GuiStyle.ImgStar));
+            GUILayout.Box(gui.Data.Resources.ImgStar, gui.ColoredStyle.ImgStar);
         }
 
         private void RateMeUI()
@@ -42,20 +44,20 @@ namespace DA_Assets.FCU
             gui.DrawGroup(new Group
             {
                 GroupType = GroupType.Vertical,
-                Style = GuiStyle.BoxPanel,
+                Style = gui.ColoredStyle.BoxPanel,
                 Body = () =>
                 {
                     int dc = GetFirstVersionDaysCount();
-                    gui.Label(new GUIContent(FcuLocKey.label_rateme_desc.Localize(dc)), WidthType.Expand, GuiStyle.Label12px);
+                    gui.Label12px(new GUIContent(FcuLocKey.label_rateme_desc.Localize(dc)), GUILayout.ExpandWidth(true));
 
                     gui.Space5();
-                    if (gui.OutlineButton("Don't show", null, expand: WidthType.Expand))
+                    if (gui.OutlineButton("Don't show", "null", true))
                     {
                         DontShowRateMe_OnClick();
                     }
 
                     gui.Space5();
-                    if (gui.OutlineButton("Open Asset Store", null, expand: WidthType.Expand))
+                    if (gui.OutlineButton("Open Asset Store", "null", true))
                     {
                         int packageId;
 
@@ -87,9 +89,18 @@ namespace DA_Assets.FCU
         {
             gui.TopProgressBar(monoBeh.RequestSender.PbarProgress);
 
-            GUILayout.BeginVertical(gui.Resources.FcuLogo, gui.GetStyle(GuiStyle.Logo));
-            gui.Space30();
-            GUILayout.EndVertical();
+            gui.DrawGroup(new Group
+            {
+                GroupType = GroupType.Horizontal,
+                Body = () =>
+                {
+                    gui.Space(18);
+                    GUILayout.BeginVertical(gui.Data.Resources.FcuLogo, gui.ColoredStyle.Logo);
+                    gui.Space30();
+                    GUILayout.EndVertical();
+                    gui.Space(18);
+                }
+            });
 
             if (monoBeh.AssetTools.NeedShowRateMe)
             {
@@ -98,7 +109,7 @@ namespace DA_Assets.FCU
             }
 
             UpdateChecker.DrawVersionLine(AssetType.fcu, FcuConfig.Instance.ProductVersion);
-#if FCU_UITK_EXT_EXISTS
+#if FCU_EXISTS && FCU_UITK_EXT_EXISTS
             UpdateChecker.DrawVersionLine(AssetType.uitk, FuitkConfig.Instance.ProductVersion);
 #endif
             DrawImportInfoLine();
@@ -145,37 +156,37 @@ namespace DA_Assets.FCU
                 {
                     gui.FlexibleSpace();
 
-                    gui.Label(new GUIContent($"{Mathf.Round(monoBeh.RequestSender.PbarBytes / 1024)} kB", FcuLocKey.label_kilobytes.Localize()), WidthType.Option, GuiStyle.Label10px);
+                    gui.Label10px(new GUIContent($"{Mathf.Round(monoBeh.RequestSender.PbarBytes / 1024)} kB", FcuLocKey.label_kilobytes.Localize()));
                     gui.Space5();
-                    gui.Label(new GUIContent("—"), WidthType.Option, GuiStyle.Label10px);
+                    gui.Label10px(new GUIContent("—"));
 
-                    string userId = monoBeh.FigmaSession.CurrentFigmaUser.Id.SubstringSafe(10);
-                    string userName = monoBeh.FigmaSession.CurrentFigmaUser.Name;
+                    string userId = monoBeh.Authorizer.CurrentSession.User.Id.SubstringSafe(10);
+                    string userName = monoBeh.Authorizer.CurrentSession.User.Name;
 
                     if (string.IsNullOrWhiteSpace(userName) == false)
                     {
                         gui.Space5();
-                        gui.Label(new GUIContent(userName, FcuLocKey.label_user_name.Localize()), WidthType.Option, GuiStyle.Label10px);
+                        gui.Label10px(new GUIContent(userName, FcuLocKey.label_user_name.Localize()));
                         gui.Space5();
-                        gui.Label(new GUIContent("—"), WidthType.Option, GuiStyle.Label10px);
+                        gui.Label10px(new GUIContent("—"));
                     }
                     else if (string.IsNullOrWhiteSpace(userId) == false)
                     {
                         gui.Space5();
-                        gui.Label(new GUIContent(userId, FcuLocKey.tooltip_user_id.Localize()), WidthType.Option, GuiStyle.Label10px);
+                        gui.Label10px(new GUIContent(userId, FcuLocKey.tooltip_user_id.Localize()));
                         gui.Space5();
-                        gui.Label(new GUIContent("—"), WidthType.Option, GuiStyle.Label10px);
+                        gui.Label10px(new GUIContent("—"));
                     }
 
                     gui.Space5();
-                    gui.Label(new GUIContent(monoBeh.Guid, FcuLocKey.tooltip_asset_instance_id.Localize()), WidthType.Option, GuiStyle.Label10px);
+                    gui.Label10px(new GUIContent(monoBeh.Guid, FcuLocKey.tooltip_asset_instance_id.Localize()));
                 }
             });
         }
 
         private void DrawCurrentProjectName()
         {
-            string currentProjectName = monoBeh.CurrentProject.FigmaProject.Name;
+            string currentProjectName = monoBeh.CurrentProject.ProjectName;
 
             if (currentProjectName != null)
             {
@@ -185,7 +196,7 @@ namespace DA_Assets.FCU
                     Body = () =>
                     {
                         gui.FlexibleSpace();
-                        gui.Label10px(currentProjectName, widthType: WidthType.Option);
+                        gui.Label10px(currentProjectName);
                     }
                 });
             }

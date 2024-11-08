@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1205892b9b42ffd4bb53381356b30589, type: 3}
+  m_Name: BlackInspector
+  m_EditorClassIdentifier: 
+  _inspector:
+    _cachedTextures:
+    - Key: box_no_frame_RGBA(0.000, 0.000, 0.000, 1.000)_RGBA(0.094, 0.094, 0.094,
+        1.000)
+      Texture: {fileID: 0}
+    - Key: box_active_no_frame_RGBA(0.000, 0.000, 0.000, 1.000)_RGBA(0.094, 0.094,
+        0.094, 1.000)
+      Texture: {fileID: 0}
+    - Key: box_frame_RGBA(0.000, 0.000, 0.000, 1.000)_RGBA(0.094, 0.094, 0.094, 1.000)
+      Texture: {fileID: 0}
+    - Key: box_tab_button_RGBA(0.000, 0.000, 0.000, 1.000)_RGBA(0.094, 0.094, 0.094,
+        1.000)
+      Texture: {fileID: 0}
+    - Key: box_blue_RGBA(0.000, 0.000, 0.000, 1.000)_RGBA(0.094, 0.094, 0.094, 1.000)
+      Texture: {fileID: 0}
+  _data: {fileID: 11400000, guid: 0a0723b0ae7bbae4ba0308548c0e5169, type: 2}
+  _colorScheme:
+    BackgroundColor: {r: 0, g: 0, b: 0, a: 1}
+    OutlineColor: {r: 0.09411765, g: 0.09411765, b: 0.09411765, a: 1}
+    UnityGuiColor: {r: 0.15686275, g: 0.15686275, b: 0.15686275, a: 1}
+    CheckBoxColor: {r: 0.39215687, g: 0.39215687, b: 0.39215687, a: 1}
+    SelectionColor: {r: 0.047058824, g: 0.54901963, b: 0.9137255, a: 1}
+    TextColor: {r: 1, g: 1, b: 1, a: 1}

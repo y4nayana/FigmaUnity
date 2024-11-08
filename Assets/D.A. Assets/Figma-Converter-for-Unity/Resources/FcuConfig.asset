@@ -12,7 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 471efbc970a337c4c83b1330ba757435, type: 3}
   m_Name: FcuConfig
   m_EditorClassIdentifier: 
-  productVersion: 3.1.13
+  productVersion: 5.0.2
+  localizator:
+    locFile: {fileID: 4900000, guid: 76e267d64912f5c44a25b64a5d86254b, type: 3}
   tags:
   - label: None
     fcuTag: 0
@@ -45,6 +47,13 @@ MonoBehaviour:
   - label: Image
     fcuTag: 201
     figmaTag: img
+    customButtonTag: 0
+    canBeDownloaded: 1
+    canBeInsideSingleImage: 1
+    hasComponent: 1
+  - label: Background
+    fcuTag: 203
+    figmaTag: bg
     customButtonTag: 0
     canBeDownloaded: 1
     canBeInsideSingleImage: 1
@@ -147,12 +156,40 @@ MonoBehaviour:
     canBeDownloaded: 0
     canBeInsideSingleImage: 0
     hasComponent: 1
+  - label: PasswordField
+    fcuTag: 304
+    figmaTag: pwd
+    customButtonTag: 0
+    canBeDownloaded: 0
+    canBeInsideSingleImage: 0
+    hasComponent: 1
+  - label: ScrollView
+    fcuTag: 303
+    figmaTag: scroll
+    customButtonTag: 0
+    canBeDownloaded: 0
+    canBeInsideSingleImage: 0
+    hasComponent: 1
+  - label: Toggle
+    fcuTag: 305
+    figmaTag: tg
+    customButtonTag: 0
+    canBeDownloaded: 0
+    canBeInsideSingleImage: 0
+    hasComponent: 1
+  - label: ToggleGroup
+    fcuTag: 306
+    figmaTag: tgr
+    customButtonTag: 0
+    canBeDownloaded: 0
+    canBeInsideSingleImage: 0
+    hasComponent: 1
   - label: Shadow
     fcuTag: 500
     figmaTag: 
     customButtonTag: 0
     canBeDownloaded: 1
-    canBeInsideSingleImage: 1
+    canBeInsideSingleImage: 0
     hasComponent: 1
   - label: CanvasGroup
     fcuTag: 501
@@ -168,106 +205,52 @@ MonoBehaviour:
     canBeDownloaded: 1
     canBeInsideSingleImage: 1
     hasComponent: 1
-  dependencies:
-  - Name: Json.NET
-    Type: Newtonsoft.Json.JsonConvert, Newtonsoft.Json
-    ScriptingDefineName: JSONNET_EXISTS
-  - Name: TextMeshPro
-    Type: TMPro.TextMeshPro, Unity.TextMeshPro
-    ScriptingDefineName: TextMeshPro
-  - Name: TrueShadow
-    Type: LeTai.TrueShadow.TrueShadow, LeTai.TrueShadow
-    ScriptingDefineName: TRUESHADOW_EXISTS
-  - Name: MPUIKit
-    Type: MPUIKIT.MPImage, MPUIKit
-    ScriptingDefineName: MPUIKIT_EXISTS
-  - Name: Procedural UI Image
-    Type: UnityEngine.UI.ProceduralImage.ProceduralImage, Assembly-CSharp
-    ScriptingDefineName: PUI_EXISTS
-  - Name: I2Localization
-    Type: I2.Loc.Localize, Assembly-CSharp
-    ScriptingDefineName: I2LOC_EXISTS
-  - Name: Shapes2D
-    Type: Shapes2D.Shape, Assembly-CSharp
-    ScriptingDefineName: SUBC_SHAPES_EXISTS
-  - Name: UI Toolkit
-    Type: UnityEngine.UIElements.UIDocument, UnityEngine.UIElementsModule
-    ScriptingDefineName: UITK_EXISTS
-  - Name: Figma to UITK Converter
-    Type: DA_Assets.FCU.UitkConverter, Assembly-CSharp
-    ScriptingDefineName: FCU_UITK_EXT_EXISTS
-  - Name: DAButton
-    Type: DA_Assets.DAB.DAButton, DA_Button
-    ScriptingDefineName: DABUTTON_EXISTS
-  - Name: RTL Text Mesh Pro
-    Type: RTLTMPro.RTLTextMeshPro, RTLTMPro
-    ScriptingDefineName: RTLTMP_EXISTS
-  - Name: DTT's Procedural UI
-    Type: DTT.UI.ProceduralUI.RoundedImage, DTT.ProceduralUI.Runtime
-    ScriptingDefineName: PROCEDURAL_UI_ASSET_STORE_RELEASE
-  - Name: UITK Element Linker
-    Type: DA_Assets.UEL.UitkLinkerBase, DA_Assets.UEL
-    ScriptingDefineName: UITK_LINKER_EXISTS
-  - Name: Freya's Shapes
-    Type: Shapes.Polygon, Assembly-CSharp
-    ScriptingDefineName: FREYA_SHAPES_EXISTS
-  - Name: Nova UI
-    Type: Nova.UIBlock2D, Nova
-    ScriptingDefineName: NOVA_UI_EXISTS
+  - label: Blur
+    fcuTag: 503
+    figmaTag: 
+    customButtonTag: 0
+    canBeDownloaded: 1
+    canBeInsideSingleImage: 0
+    hasComponent: 1
+  - label: Ignore
+    fcuTag: 600
+    figmaTag: ignore
+    customButtonTag: 0
+    canBeDownloaded: 1
+    canBeInsideSingleImage: 0
+    hasComponent: 0
+  - label: 9-slice
+    fcuTag: 204
+    figmaTag: 
+    customButtonTag: 0
+    canBeDownloaded: 1
+    canBeInsideSingleImage: 0
+    hasComponent: 0
   webLogFileName: response.json
-  localizationFileName: localization.csv
   dateTimeFormat1: HH-mm-ss-fff
   dateTimeFormat2: HH-mm-ss
   dateTimeFormat3: yyyy-MM-dd--HH-mm-ss
   canvasGameObjectName: Canvas {0}
-  i2LocGameObjectName: script - Language Source
-  maxCachedFilesCount: 25
-  maxLogFilesCount: 50
-  gameObjectNameLength: 32
-  textObjectNameLength: 16
-  generateMipMaps: 0
-  crunchedCompression: 0
-  crunchedCompressionQuality: 100
-  textureImporterCompression: 0
-  https: 1
+  i2LocGameObjectName: Language Source
+  recentProjectsLimit: 20
+  figmaSessionsLimit: 10
+  logFilesLimit: 50
+  maxRenderSize: 4096
+  renderUpscaleFactor: 2
+  blurredObjectTag: UIBlur
+  blurCameraTag: BackgroundBlur
+  realTagSeparator: 45
   apiRequestsCountLimit: 500
   apiTimeoutSec: 60
   chunkSizeGetNodes: 10
-  chunkSizeGetSpriteLinks: 100
-  chunkSizeDownloadSprites: 100
-  inspectorDepth: 2
+  frameListDepth: 2
   gFontsApiKey: 
-  realTagSeparator: 45
-  maxRenderSize: 4096
-  rateMePrefsKey: fcuRateMeShown
-  renderUpscaleFactor: 2
-  spriteX32: {fileID: 21300000, guid: c863a1ee30e5f0a478b421c09b3bcfd9, type: 3}
+  whiteSprite32px: {fileID: 21300000, guid: c863a1ee30e5f0a478b421c09b3bcfd9, type: 3}
+  missingImageTexture128px: {fileID: 21300000, guid: 3e820c8fcbbdcfd4592a8ccbb7de0370, type: 3}
   baseClass: {fileID: 4900000, guid: 8e32de32e14b50747995a6f5a08bb9ae, type: 3}
-  defaultTargetGraphic:
-    name: 
-    enabled: 0
-    targetGraphic: {fileID: 0}
-    normalState:
-      duration: 0
-      animationCurve:
-        serializedVersion: 2
-        m_Curve: []
-        m_PreInfinity: 2
-        m_PostInfinity: 2
-        m_RotationOrder: 4
-      sprite:
-        _enabled: 0
-        _value: {fileID: 0}
-      color:
-        _enabled: 0
-        _value: {r: 0, g: 0, b: 0, a: 0}
-      position:
-        _enabled: 0
-        _value: {x: 0, y: 0}
-      rotation:
-        _enabled: 0
-        _value: 0
-      scale:
-        _enabled: 0
-        _value: {x: 0, y: 0}
-    animations: []
+  imageLinearMaterial: {fileID: 2100000, guid: 41bc1ce8da9e87a4fa340d902394e0df, type: 2}
+  vectorMaterials:
+    UnlitVector: {fileID: 2100000, guid: 73ddb2958e9cd451c82f37c26efa5eb0, type: 2}
+    UnlitVectorGradient: {fileID: 2100000, guid: 137d858a4eae4d34298f3cdcd31f5e0b, type: 2}
+    UnlitVectorGradientUI: {fileID: 2100000, guid: 0b012844cadfbe541b20626331cf90a2, type: 2}
+    UnlitVectorUI: {fileID: 2100000, guid: 8d66e65c66e29504199ed664979682cd, type: 2}

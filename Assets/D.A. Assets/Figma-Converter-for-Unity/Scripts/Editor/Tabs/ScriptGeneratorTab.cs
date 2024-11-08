@@ -1,13 +1,11 @@
-﻿using DA_Assets.FCU.Model;
-using DA_Assets.Shared;
+﻿using DA_Assets.DAI;
 using UnityEngine;
 
-#pragma warning disable IDE0003
 #pragma warning disable CS0649
 
 namespace DA_Assets.FCU
 {
-    internal class ScriptGeneratorTab : ScriptableObjectBinder<FcuSettingsWindow, FigmaConverterUnity>
+    internal class ScriptGeneratorTab : MonoBehaviourLinkerEditor<FcuSettingsWindow, FigmaConverterUnity, BlackInspector>
     {
         public void Draw()
         {
@@ -22,9 +20,9 @@ namespace DA_Assets.FCU
                 new GUIContent(FcuLocKey.label_namespace.Localize()),
                 monoBeh.Settings.ScriptGeneratorSettings.Namespace);
 
-            monoBeh.Settings.ScriptGeneratorSettings.OutputPath = gui.DrawSelectPathField(
-                monoBeh.Settings.ScriptGeneratorSettings.OutputPath,
+            monoBeh.Settings.ScriptGeneratorSettings.OutputPath = gui.FolderField(
                 new GUIContent(FcuLocKey.label_scripts_output_path.Localize()),
+                monoBeh.Settings.ScriptGeneratorSettings.OutputPath,
                 new GUIContent(FcuLocKey.label_change.Localize()),
                 FcuLocKey.label_select_folder.Localize());
         }

@@ -1,30 +1,300 @@
-﻿using DA_Assets.Shared.Extensions;
+﻿using DA_Assets.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.AnimatedValues;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
+using Object = UnityEngine.Object;
 
 #pragma warning disable CS0649
 
-namespace DA_Assets.Shared
+namespace DA_Assets.DAI
 {
-    [CreateAssetMenu(menuName = DAConstants.Publisher + "/" + DAConstants.DAInspector)]
-    public class DAInspector : SingletoneScriptableObject<DAInspector>
+    [Serializable]
+    public class DAInspector
     {
-        [SerializeField] GUIStyle[] guiStyles;
-        [SerializeField] DAIResources resources;
-        public DAIResources Resources => resources;
+        private const int _hamburgerMenuItemsLimit = 100;
 
-        private Dictionary<string, GroupData> groupDatas = new Dictionary<string, GroupData>();
-        private Dictionary<string, HamburgerItem> hamItems = new Dictionary<string, HamburgerItem>();
+        private InspectorData _data;
+        public InspectorData Data => _data;
 
-        private const int hamburgerMenuItemsLimit = 200;
+        [SerializeField] DaiStyle _coloredStyle;
+        private ColorScheme _colorScheme;
+
+        public DaiStyle ColoredStyle => _coloredStyle;
+
+        [SerializeField, HideInInspector] List<CachedTextureEntry> _cachedTextures = new List<CachedTextureEntry>();
+        private Dictionary<string, GroupData> _groupDatas = new Dictionary<string, GroupData>();
+        private Dictionary<string, HamburgerItem> _hamburgerItems = new Dictionary<string, HamburgerItem>();
+
+        public void Init(InspectorData data, ColorScheme colorScheme)
+        {
+            _data = data;
+            _colorScheme = colorScheme;
+            _coloredStyle = new DaiStyle();
+
+            CreateColorScheme(forced: false);
+            FindTypes();
+        }
+
+        public Object ObjectField(GUIContent content, Object value, Type objectType, bool allowSceneObjects)
+        {
+            Object _value = null;
+
+            DrawGroup(new Group
+            {
+                GroupType = GroupType.Horizontal,
+                Body = () =>
+                {
+                    Label12px(content);
+                    FlexibleSpace();
+
+                    Rect position = GUILayoutUtility.GetRect(_coloredStyle.ObjectField.fixedWidth, _coloredStyle.ObjectField.fixedHeight);
+                    Rect dropRect = position;
+                    int controlID = GUIUtility.GetControlID(FocusType.Passive);
+
+                    _value = (Object)_doObjectFieldMethod.Invoke(null, new object[]
+                    {
+                        position,
+                        dropRect,
+                        controlID,
+                        value,
+                        null,
+                        objectType,
+                        _validatorDelegate,
+                        allowSceneObjects,
+                        _coloredStyle.ObjectField
+                    });
+                }
+            });
+
+            return _value;
+        }
+
+        private static MethodInfo _doObjectFieldMethod;
+        private static Type _objectFieldValidatorType;
+        private static Type _objectFieldValidatorOptionsType;
+
+        private void FindTypes()
+        {
+            if (_objectFieldValidatorType == null)
+            {
+                Type editorGUIType = typeof(EditorGUI);
+                _objectFieldValidatorType = editorGUIType.GetNestedType("ObjectFieldValidator", BindingFlags.NonPublic);
+                _objectFieldValidatorOptionsType = editorGUIType.GetNestedType("ObjectFieldValidatorOptions", BindingFlags.NonPublic);
+            }
+
+            if (_doObjectFieldMethod == null)
+            {
+                Type editorGUIType = typeof(EditorGUI);
+                _doObjectFieldMethod = editorGUIType.GetMethod(
+                    "DoObjectField",
+                    BindingFlags.NonPublic | BindingFlags.Static,
+                    null,
+                    new Type[]
+                    {
+                        typeof(Rect),
+                        typeof(Rect),
+                        typeof(int),
+                        typeof(UnityEngine.Object),
+                        typeof(UnityEngine.Object),
+                        typeof(Type),
+                        _objectFieldValidatorType,
+                        typeof(bool),
+                        typeof(GUIStyle)
+                    },
+                    null);
+            }
+
+            if (_validatorDelegate == null)
+            {
+                MethodInfo myValidatorMethodInfo = typeof(DAInspector).GetMethod(nameof(ObjectFieldValidator), BindingFlags.NonPublic | BindingFlags.Static);
+                _validatorDelegate = Delegate.CreateDelegate(_objectFieldValidatorType, myValidatorMethodInfo);
+            }
+
+        }
+
+        private static Object ObjectFieldValidator(Object[] references, Type objType, SerializedProperty property, object options)
+        {
+            if (references != null)
+            {
+                foreach (Object obj in references)
+                {
+                    if (obj != null)
+                    {
+                        return obj;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private void CreateColorScheme(bool forced)
+        {
+            if (forced || _cachedTextures.IsEmpty())
+            {
+                ProcessTextures();
+            }
+
+            Type daiStyleType = typeof(DaiStyle);
+
+            FieldInfo[] fields = daiStyleType.GetFields(BindingFlags.Public | BindingFlags.Instance);
+
+            foreach (FieldInfo field in fields)
+            {
+                if (field.FieldType == typeof(GUIStyle))
+                {
+                    GUIStyle basicStyle = (GUIStyle)field.GetValue(_data.BasicStyle);
+                    GUIStyle coloredStyle = CreateColoredStyle(basicStyle);
+                    field.SetValueDirect(__makeref(_coloredStyle), coloredStyle);
+                }
+            }
+        }
+
+        private GUIStyle CreateColoredStyle(GUIStyle style)
+        {
+            GUIStyle coloredStyle = new GUIStyle(style);
+
+            coloredStyle.normal.textColor = coloredStyle.normal.textColor == Color.white ? _colorScheme.TextColor : coloredStyle.normal.textColor;
+            coloredStyle.active.textColor = coloredStyle.active.textColor == Color.white ? _colorScheme.TextColor : coloredStyle.active.textColor;
+
+            coloredStyle.normal.background = GetTexture(coloredStyle.normal.background);
+            coloredStyle.normal.scaledBackgrounds = new Texture2D[]
+            {
+                coloredStyle.normal.background as Texture2D
+            };
+
+            coloredStyle.active.background = GetTexture(coloredStyle.active.background);
+            coloredStyle.active.scaledBackgrounds = new Texture2D[]
+            {
+                coloredStyle.active.background as Texture2D
+            };
+
+            return coloredStyle;
+
+            Texture2D GetTexture(Texture2D background)
+            {
+                if (background != null && background.name.StartsWith("box"))
+                {
+                    string cacheKey = $"{background.name}_{_colorScheme.BackgroundColor}_{_colorScheme.OutlineColor}";
+                    CachedTextureEntry entry = _cachedTextures.Find(e => e.Key == cacheKey);
+                    if (!entry.Equals(default(CachedTextureEntry)))
+                    {
+                        return entry.Texture;
+                    }
+                }
+
+                return background;
+            }
+        }
+
+        private void ProcessTextures()
+        {
+            _cachedTextures = new List<CachedTextureEntry>();
+
+            foreach (Texture2D background in _data.Resources.Backgrounds)
+            {
+                ProcessTexture(background);
+            }
+
+            Texture2D ProcessTexture(Texture2D texture)
+            {
+                string cacheKey = $"{texture.name}_{_colorScheme.BackgroundColor}_{_colorScheme.OutlineColor}";
+                CachedTextureEntry entry = _cachedTextures.Find(e => e.Key == cacheKey);
+
+                if (!entry.Equals(default(CachedTextureEntry)))
+                    return entry.Texture;
+
+                Texture2D normalTexture = MultiplyTextureColor(texture);
+
+                _cachedTextures.Add(new CachedTextureEntry { Key = cacheKey, Texture = normalTexture });
+                return normalTexture;
+            }
+        }
+
+        private Texture2D MultiplyTextureColor(Texture2D texture)
+        {
+            int width = texture.width;
+            int height = texture.height;
+
+            Color[] pixels = new Color[width * height];
+            Color[] originalPixels = texture.GetPixels();
+
+            /*float cosTheta = 0f;
+            float sinTheta = 0f;
+            float minDP = 0f;
+            float dpRange = 0f;
+
+            if (_colorScheme.UseGradient)
+            {
+                float angleRad = _colorScheme.GradientAngle * Mathf.Deg2Rad;
+                cosTheta = Mathf.Cos(angleRad);
+                sinTheta = Mathf.Sin(angleRad);
+
+                float dp00 = 0;
+                float dp10 = width * cosTheta;
+                float dp01 = height * sinTheta;
+                float dp11 = width * cosTheta + height * sinTheta;
+
+                minDP = Mathf.Min(dp00, dp10, dp01, dp11);
+
+                float maxDP = Mathf.Max(dp00, dp10, dp01, dp11);
+                dpRange = maxDP - minDP;
+
+                if (dpRange == 0f)
+                    dpRange = 1f;
+            }*/
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int index = y * width + x;
+                    Color pixel = originalPixels[index];
+
+                    if (pixel == Color.white)
+                    {
+                        /*if (_colorScheme.UseGradient)
+                        {
+                            float dp = x * cosTheta + y * sinTheta;
+                            float t = (dp - minDP) / dpRange;
+                            t = Mathf.Clamp01(t);
+
+                            pixels[index] = _colorScheme.BackgroundGradient.Evaluate(t);
+                        }
+                        else*/
+                        {
+                            pixels[index] = _colorScheme.BackgroundColor;
+                        }
+                    }
+                    else if (pixel == Color.black)
+                    {
+                        pixels[index] = _colorScheme.OutlineColor;
+                    }
+                    else if (pixel == Color.blue)
+                    {
+                        pixels[index] = _colorScheme.SelectionColor;
+                    }
+                    else
+                    {
+                        pixels[index] = pixel.Multiply(_colorScheme.BackgroundColor, 0.9f);
+                    }
+                }
+            }
+
+            Texture2D newTexture = new Texture2D(width, height);
+            newTexture.SetPixels(pixels);
+            newTexture.Apply();
+
+            return newTexture;
+        }
 
         public void DrawSplitGroup(Group group, Action body1, Action body2)
         {
@@ -32,11 +302,11 @@ namespace DA_Assets.Shared
             string methodPath = GetMethodPath(sf);
             string unicumId = $"{methodPath}-{group.InstanceId}";
 
-            if (groupDatas.TryGetValue(unicumId, out GroupData gd) == false)
+            if (_groupDatas.TryGetValue(unicumId, out GroupData gd) == false)
             {
                 gd = new GroupData();
                 gd.SplitterPosition = group.SplitterStartPos;
-                groupDatas.Add(unicumId, gd);
+                _groupDatas.Add(unicumId, gd);
             }
 
             group.Body = () =>
@@ -60,6 +330,7 @@ namespace DA_Assets.Shared
                     GUILayout.MaxWidth(group.SplitterWidth),
                     GUILayout.MinWidth(group.SplitterWidth),
                     GUILayout.ExpandHeight(true));
+
                 gd.SplitterRect = GUILayoutUtility.GetLastRect();
 
                 if (group.GroupType == GroupType.Horizontal)
@@ -114,31 +385,11 @@ namespace DA_Assets.Shared
 
         public void DrawGroup(Group group)
         {
-            if (group.LabelWidth != null)
-            {
-                EditorGUIUtility.labelWidth = (float)group.LabelWidth;
-            }
-
-            StackFrame sf = new StackFrame(1, true);
-
-            if (EditorGUIUtility.isProSkin)
-            {
-                if (group.DarkBg.ToBoolNullFalse())
-                {
-                    GUI.backgroundColor = Color.gray;
-                }
-            }
-            else
-            {
-                GUI.backgroundColor = Color.white;
-                EditorStyles.label.normal.textColor = Color.white;
-            }
-
             if (group.GroupType == GroupType.Horizontal)
             {
-                if (group.Style != GuiStyle.None)
+                if (group.Style != null)
                 {
-                    GUILayout.BeginHorizontal(GetStyle(group.Style), group.Options);
+                    GUILayout.BeginHorizontal(group.Style, group.Options);
                 }
                 else
                 {
@@ -157,9 +408,9 @@ namespace DA_Assets.Shared
             }
             else if (group.GroupType == GroupType.Vertical)
             {
-                if (group.Style != GuiStyle.None)
+                if (group.Style != null)
                 {
-                    GUILayout.BeginVertical(GetStyle(group.Style), group.Options);
+                    GUILayout.BeginVertical(group.Style, group.Options);
                 }
                 else
                 {
@@ -168,6 +419,7 @@ namespace DA_Assets.Shared
 
                 if (group.Scroll)
                 {
+                    StackFrame sf = new StackFrame(1, true);
                     BeginScroll(group, sf);
                 }
 
@@ -203,26 +455,13 @@ namespace DA_Assets.Shared
             }
             else
             {
-                DALogger.Log($"Unknown group type.");
-            }
-
-            if (EditorGUIUtility.isProSkin)
-            {
-                if (group.DarkBg.ToBoolNullFalse())
-                {
-                    GUI.backgroundColor = Color.white;
-                }
-            }
-            else
-            {
-                GUI.backgroundColor = Color.white;
-                EditorStyles.label.normal.textColor = Color.black;
+                Debug.LogError($"Unknown group type.");
             }
         }
 
         public bool HamburgerButton(Rect position, GUIContent content)
         {
-            bool _value = GUI.Button(position, content, GetStyle(GuiStyle.HamburgerButton));
+            bool _value = GUI.Button(position, content, _coloredStyle.HamburgerButton);
             return _value;
         }
 
@@ -232,15 +471,14 @@ namespace DA_Assets.Shared
             return _value;
         }
 
-        public bool CheckBox(GUIContent label, bool value, bool rightSide = true, Action onClick = null)
+        public bool CheckBox(GUIContent label, bool value, bool rightSide = true, Action onClick = null, Action onValueChange = null)
         {
             bool _value = false;
 
             DrawGroup(new Group
             {
-                Style = GuiStyle.CheckBoxField,
+                Style = _coloredStyle.CheckBoxField,
                 GroupType = GroupType.Horizontal,
-                DarkBg = true,
                 Body = () =>
                 {
                     if (rightSide)
@@ -249,10 +487,13 @@ namespace DA_Assets.Shared
                     }
 
                     Rect rect = GUILayoutUtility.GetRect(width: 25, height: 25);
+
+                    GUI.backgroundColor = _colorScheme.CheckBoxColor;
                     _value = EditorGUI.Toggle(
                         rect,
                         value,
                         EditorStyles.toggle);
+                    GUI.backgroundColor = Color.white;
 
                     if (!rightSide)
                     {
@@ -263,11 +504,15 @@ namespace DA_Assets.Shared
 
             void Btn()
             {
-                if (GUILayout.Button(label, GetStyle(GuiStyle.CheckBoxLabel)))
+                if (GUILayout.Button(label, _coloredStyle.CheckBoxLabel))
                 {
                     if (onClick == null)
                     {
                         value = !value;
+                        if (onValueChange != null)
+                        {
+                            onValueChange.Invoke();
+                        }
                     }
                     else
                     {
@@ -313,304 +558,508 @@ namespace DA_Assets.Shared
             });
         }
 
-        public int ShaderDropdown(GUIContent label, int option, string[] options, Action<int> onChange)
+        public int ShaderDropdown(GUIContent content, int option, string[] options, Action<int> onChange)
         {
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    Label(label);
+                    Label12px(content);
+                    FlexibleSpace();
 
                     EditorGUI.BeginChangeCheck();
-                    option = EditorGUILayout.Popup(option, options, GetStyle(GuiStyle.TextField));
+                    option = EditorGUILayout.Popup(option, options, _coloredStyle.ObjectField);
+
                     if (EditorGUI.EndChangeCheck())
                     {
                         onChange?.Invoke(option);
                     }
+                    DrawDropDownIcon();
                 }
             });
 
-            Rect rect = GUILayoutUtility.GetRect(width: 125, height: 25);
-            rect.y -= 22;
-            rect.x += 156;
-
-            Space6();
             return option;
         }
 
-        public int Dropdown(GUIContent label, int option, string[] options, Action<int> onChange)
+        public int BigDropdown(int selectedIndex, GUIContent[] displayedOptions, Action<int> onChange, bool expand = true)
+        {
+            GUIStyle customStyle = _coloredStyle.BigDropdown;
+            GUIContent currentSelection = displayedOptions[selectedIndex];
+
+            GUILayoutOption[] options;
+
+            if (expand)
+            {
+                options = new GUILayoutOption[] { GUILayout.Height(customStyle.fixedHeight), GUILayout.ExpandWidth(true) };
+            }
+            else
+            {
+                Vector2 textSize = customStyle.CalcSize(new GUIContent(currentSelection.text));
+                float imageWidth = 0f;
+
+                if (currentSelection.image != null)
+                {
+                    imageWidth = customStyle.fixedHeight - 2;
+                    imageWidth += 2f;
+                }
+
+                float calculatedWidth = textSize.x + imageWidth + 20f;
+                if (calculatedWidth < 200)
+                {
+                    calculatedWidth = 200;
+                }
+                options = new GUILayoutOption[] { GUILayout.Height(customStyle.fixedHeight), GUILayout.Width(calculatedWidth) };
+            }
+
+            Rect dropdownRect = EditorGUILayout.GetControlRect(options);
+
+            EditorGUI.BeginChangeCheck();
+            selectedIndex = EditorGUI.Popup(dropdownRect, selectedIndex, displayedOptions, customStyle);
+            if (EditorGUI.EndChangeCheck())
+            {
+                onChange?.Invoke(selectedIndex);
+            }
+
+            if (currentSelection.image != null)
+            {
+                float imageSize = customStyle.fixedHeight - 2;
+                Rect imageRect = new Rect(dropdownRect.x + 1, dropdownRect.y + 1, imageSize, imageSize);
+                GUI.DrawTexture(imageRect, currentSelection.image, ScaleMode.ScaleToFit);
+            }
+
+            DrawDropDownIcon(-5);
+
+            return selectedIndex;
+        }
+
+        public int Dropdown(GUIContent content, int option, string[] displayedOptions, Action<int> onChange)
         {
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    Label(label);
-
+                    Label12px(content);
+                    FlexibleSpace();
                     EditorGUI.BeginChangeCheck();
-                    option = EditorGUILayout.Popup(option, options, GetStyle(GuiStyle.TextField));
+                    option = EditorGUILayout.Popup(option, displayedOptions, _coloredStyle.ObjectField, GUILayout.Width(200));
                     if (EditorGUI.EndChangeCheck())
                     {
                         onChange?.Invoke(option);
                     }
+
+                    DrawDropDownIcon();
                 }
             });
 
-            Space6();
             return option;
         }
 
-        public bool Toggle(GUIContent label, bool value, GUIContent btnLabel = null, Action buttonClick = null, int indentPx = 0)
+        private void DrawDropDownIcon(float paddingX = 5)
         {
-            int option = value ? 1 : 0;
+            Rect popupRect = GUILayoutUtility.GetLastRect();
 
+            float iconSize = popupRect.height * 1f;
+            Rect iconRect = new Rect(
+                popupRect.x + popupRect.width - iconSize - paddingX, // 5 pixels right padding
+                popupRect.y + (popupRect.height - iconSize) / 2 + 1, // Vertical centering
+                iconSize,
+                iconSize
+            );
+
+            GUIContent dropdownIcon = EditorGUIUtility.IconContent("Dropdown");
+            Texture iconTexture = dropdownIcon?.image;
+
+            if (iconTexture != null)
+            {
+                GUI.Label(iconRect, new GUIContent(iconTexture));
+            }
+            else
+            {
+                GUI.Label(iconRect, new GUIContent("V"));
+            }
+        }
+
+        public void GenericMenu(GenericMenu menu, GUIContent content, string selectedItem)
+        {
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    Space(indentPx);
-                    Label(label);
-
-                    option = EditorGUILayout.Popup(option, new string[]
+                    Label12px(content);
+                    FlexibleSpace();
+                    if (Button(new GUIContent(selectedItem), _coloredStyle.ObjectField, true))
                     {
-                        "DISABLED",
-                        "ENABLED"
-                    }, GetStyle(GuiStyle.TextField));
+                        menu.ShowAsContext();
+                    }
 
-                    if (buttonClick != null && btnLabel != null)
+                    DrawDropDownIcon();
+                }
+            });
+        }
+
+        public bool Toggle(GUIContent content, bool value)
+        {
+            DrawGroup(new Group
+            {
+                GroupType = GroupType.Horizontal,
+                Body = () =>
+                {
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
+
+                    GUIStyle buttonStyle = value ? _coloredStyle.ActiveToggle : _coloredStyle.ObjectField;
+
+                    if (GUILayout.Button(value ? "ENABLED" : "DISABLED", buttonStyle))
                     {
-                        Space10();
-
-                        if (GUILayout.Button(btnLabel, GetStyle(GuiStyle.HabmurgerTextSubButton)))
-                        {
-                            buttonClick.Invoke();
-                        }
+                        value = !value;
                     }
                 }
             });
 
-            Space6();
-
-            bool _value = option == 1;
-
-            return _value;
+            return value;
         }
 
-        public string BigTextField(string value, string label = null, string tooltip = null, bool password = false)
+        public string BigTextField(string value, GUIContent content, bool password = false/*, string placeholder = "Enter text..."*/)
         {
-            string _value = "";
-
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    if (label != null)
+                    if (content != null)
                     {
-                        GUILayout.Label(new GUIContent(label, tooltip), GetStyle(GuiStyle.BigFieldLabel12px), GUILayout.Width(EditorGUIUtility.labelWidth));
+                        Vector2 textSize = _coloredStyle.Label12px.CalcSize(content);
+                        GUILayout.Label(content, _coloredStyle.BigFieldLabel12px, GUILayout.Width(textSize.x));
+                        Space60();
+                    }
+
+                    GUIStyle style;
+
+                    /*if (value == null || value == placeholder)
+                    {
+                        style = new GUIStyle(_coloredStyle.BigTextField);
+                        style.normal.textColor = Color.gray;
+                        value = placeholder;
+                    }
+                    else*/
+                    {
+                        style = _coloredStyle.BigTextField;
                     }
 
                     if (password)
                     {
-                        _value = EditorGUILayout.PasswordField(value, GetStyle(GuiStyle.BigTextField), GUILayout.ExpandWidth(true));
+                        value = EditorGUILayout.PasswordField(value, style, GUILayout.ExpandWidth(true));
                     }
                     else
                     {
-                        _value = EditorGUILayout.TextField(value, GetStyle(GuiStyle.BigTextField), GUILayout.ExpandWidth(true));
+                        value = EditorGUILayout.TextField(value, style, GUILayout.ExpandWidth(true));
                     }
                 }
             });
 
-            return _value;
+            return value;
         }
 
-        public string TextField(GUIContent label, string currentValue, GUIContent btnLabel = null, Action buttonClick = null, bool password = false)
+        public string TextAreaPrefs(string prefsKey, GUIContent content, string currentValue, float width)
+        {
+            EditorGUI.BeginChangeCheck();
+            string newValue = TextArea(content, currentValue, width);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetString(prefsKey, newValue);
+                return newValue;
+            }
+            return currentValue;
+        }
+
+        public string TextFieldPrefs(string prefsKey, GUIContent content, string currentValue)
+        {
+            EditorGUI.BeginChangeCheck();
+            string newValue = TextField(content, currentValue);
+            if (EditorGUI.EndChangeCheck())
+            {
+                EditorPrefs.SetString(prefsKey, newValue);
+                return newValue;
+            }
+            return currentValue;
+        }
+
+
+        public string TextArea(GUIContent content, string currentValue, float? width = null)
         {
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    Label(label);
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
 
-                    if (password)
+                    if (width != null)
                     {
-                        currentValue = EditorGUILayout.PasswordField(currentValue, GetStyle(GuiStyle.TextField));
+                        currentValue = EditorGUILayout.TextArea(currentValue, GUILayout.Width(width.Value));
                     }
                     else
                     {
-                        currentValue = EditorGUILayout.TextField(currentValue, GetStyle(GuiStyle.TextField));
+                        currentValue = EditorGUILayout.TextArea(currentValue);
                     }
 
-                    if (buttonClick != null)
-                    {
-                        Space6();
-
-                        GUIStyle style;
-
-                        if (btnLabel.image == null)
-                        {
-                            style = GetStyle(GuiStyle.HabmurgerTextSubButton);
-                        }
-                        else
-                        {
-                            style = GetStyle(GuiStyle.HabmurgerImageSubButton);
-                        }
-
-                        if (GUILayout.Button(btnLabel, style))
-                        {
-                            buttonClick.Invoke();
-                        }
-                    }
                 }
             });
-
-            Space6();
 
             return currentValue;
         }
 
-        public float SliderField(GUIContent label, float value, float minValue, float maxValue)
+        public bool SubButtonText(string label, string tooltip = null) =>
+            SubButtonText(new GUIContent(label, tooltip));
+
+        public bool SubButtonText(GUIContent content)
+        {
+            Vector2 size = _coloredStyle.HamburgerTextSubButton.CalcSize(content);
+            size += new Vector2(10, 0);
+            return GUILayout.Button(content, _coloredStyle.HamburgerTextSubButton, GUILayout.Width(size.x));
+        }
+
+        public bool SubButtonIcon(Texture image, string tooltip = null)
+        {
+            return GUILayout.Button(new GUIContent(image, tooltip), _coloredStyle.HamburgerImageSubButton);
+        }
+
+        public string TextField(GUIContent content, string currentValue, GUIContent btnLabel = null, Action buttonClick = null, bool password = false, string placeholder = "Enter text...")
+        {
+            DrawGroup(new Group
+            {
+                GroupType = GroupType.Horizontal,
+                Body = () =>
+                {
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
+
+                    Vector2 textSize = _coloredStyle.TextField.CalcSize(new GUIContent(currentValue));
+
+                    float width = textSize.x;
+
+                    if (width > 400)
+                    {
+                        width = 400;
+                    }
+                    else if (width < 200 && buttonClick != null)
+                    {
+                        width = 160;
+                    }
+                    else if (width < 200)
+                    {
+                        width = 200;
+                    }
+                    else
+                    {
+                        width += 10;
+                    }
+
+                    GUIStyle style;
+
+                    if (currentValue == null || currentValue == placeholder)
+                    {
+                        style = new GUIStyle(_coloredStyle.TextField);
+                        style.normal.textColor = Color.gray;
+                        currentValue = placeholder;
+                    }
+                    else
+                    {
+                        style = _coloredStyle.TextField;
+                    }
+
+                    if (password)
+                    {
+                        currentValue = EditorGUILayout.PasswordField(currentValue, style, GUILayout.Width(width));
+                    }
+                    else
+                    {
+                        currentValue = EditorGUILayout.TextField(currentValue, style, GUILayout.Width(width));
+                    }
+
+                    if (buttonClick != null)
+                    {
+                        Space10();
+
+                        if (btnLabel.image == null)
+                        {
+                            if (SubButtonText(btnLabel))
+                            {
+                                buttonClick.Invoke();
+                            }
+                        }
+                        else
+                        {
+                            if (SubButtonIcon(btnLabel.image, btnLabel.tooltip))
+                            {
+                                buttonClick.Invoke();
+                            }
+                        }
+                    }
+                }
+            });
+
+            return currentValue;
+        }
+
+        public float SliderField(GUIContent content, float value, float minValue, float maxValue)
         {
             float _value = 0;
 
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
-                DarkBg = true,
                 Body = () =>
                 {
-                    Label(label);
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
 
-                    _value = EditorGUILayout.Slider(value, minValue, maxValue);
+                    GUI.backgroundColor = _colorScheme.UnityGuiColor;
+                    _value = EditorGUILayout.Slider(value, minValue, maxValue, GUILayout.Width(200));
+                    GUI.backgroundColor = Color.white;
                 }
             });
-
-            Space6();
 
             return _value;
         }
 
-        public float FloatField(GUIContent label, float value)
+        public float FloatField(GUIContent content, float value)
         {
             float _value = 0;
 
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
-                DarkBg = true,
                 Body = () =>
                 {
-                    Label(label);
-                    _value = EditorGUILayout.FloatField(value, GetStyle(GuiStyle.TextField));
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
+
+                    _value = EditorGUILayout.FloatField(value, _coloredStyle.ObjectField, GUILayout.Width(200));
                 }
             });
-
-            Space6();
 
             return _value;
         }
 
-        public int IntField(GUIContent label, int value)
+        public int IntField(GUIContent content, int value)
         {
             int _value = 0;
 
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
-                DarkBg = true,
                 Body = () =>
                 {
-                    Label(label);
-                    _value = EditorGUILayout.IntField(value, GetStyle(GuiStyle.TextField));
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
+
+                    _value = EditorGUILayout.IntField(value, _coloredStyle.ObjectField, GUILayout.Width(200));
                 }
             });
-
-            Space6();
 
             return _value;
         }
 
-        public Vector2Int Vector2IntField(GUIContent label, Vector2Int value)
+        public Vector2 Vector2Field(GUIContent content, Vector2 value)
+        {
+            Vector2 _value = default;
+
+            DrawGroup(new Group
+            {
+                GroupType = GroupType.Horizontal,
+                Body = () =>
+                {
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
+
+                    GUI.backgroundColor = _colorScheme.UnityGuiColor;
+                    _value = EditorGUILayout.Vector2Field("", value, GUILayout.Width(200));
+                    GUI.backgroundColor = Color.white;
+                }
+            });
+
+            return _value;
+        }
+
+        public Color ColorField(GUIContent content, Color value)
+        {
+            Color _value = default;
+
+            DrawGroup(new Group
+            {
+                GroupType = GroupType.Horizontal,
+                Body = () =>
+                {
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
+
+                    GUI.backgroundColor = _colorScheme.UnityGuiColor;
+                    _value = EditorGUILayout.ColorField("", value, GUILayout.Width(200));
+                    GUI.backgroundColor = Color.white;
+                }
+            });
+
+            return _value;
+        }
+
+        public Vector2Int Vector2IntField(GUIContent content, Vector2Int value)
         {
             Vector2Int _value = default;
 
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
-                DarkBg = true,
                 Body = () =>
                 {
-                    Label(label);
-                    _value = EditorGUILayout.Vector2IntField("", value);
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
+
+                    GUI.backgroundColor = _colorScheme.UnityGuiColor;
+                    _value = EditorGUILayout.Vector2IntField("", value, GUILayout.Width(200));
+                    GUI.backgroundColor = Color.white;
                 }
             });
-
-            Space6();
 
             return _value;
         }
 
-        public Vector4 Vector4Field(GUIContent label, Vector4 value)
+        public Vector4 Vector4Field(GUIContent content, Vector4 value)
         {
             Vector4 _value = default;
 
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
-                DarkBg = true,
                 Body = () =>
                 {
-                    Label(label);
-                    _value = EditorGUILayout.Vector4Field("", value);
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
+
+                    GUI.backgroundColor = _colorScheme.UnityGuiColor;
+                    _value = EditorGUILayout.Vector4Field("", value, GUILayout.Width(200));
+                    GUI.backgroundColor = Color.white;
                 }
             });
-
-            Space6();
 
             return _value;
         }
 
-        public void Label(GUIContent label, WidthType labelWidthType = WidthType.Default, GuiStyle customStyle = GuiStyle.Label12px)
-        {
-            GUIStyle style = GetStyle(customStyle);
-
-            switch (labelWidthType)
-            {
-                case WidthType.Default:
-                    GUILayout.Label(label, style, GUILayout.Width(EditorGUIUtility.labelWidth));
-                    break;
-                case WidthType.Option:
-                    GUILayout.Label(label, style);
-                    break;
-                case WidthType.Expand:
-                    GUILayout.Label(label, style, GUILayout.ExpandWidth(true));
-                    break;
-            }
-        }
-
-        public GUIStyle GetStyle(GuiStyle customStyle)
-        {
-            foreach (GUIStyle style in guiStyles)
-            {
-                if (style.name == $"{customStyle}")
-                {
-                    return style;
-                }
-            }
-
-            Debug.LogError($"'{customStyle}' style not found.");
-            return guiStyles.FirstOrDefault(x => x.name == GuiStyle.None.ToString());
-        }
-
-
-
-        public void Space10() => GUILayout.Space(10);
-        public void Space6() => GUILayout.Space(6);
-
-        public int LayerField(GUIContent label, int layer)
+        public int LayerField(GUIContent content, int layer)
         {
             int result = 0;
 
@@ -619,17 +1068,15 @@ namespace DA_Assets.Shared
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    if (label != null)
-                    {
-                        Label(label);
-                    }
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
 
                     Rect r = EditorGUILayout.GetControlRect(false, 20);
-                    result = EditorGUI.LayerField(r, layer, GetStyle(GuiStyle.TextField));
+                    result = EditorGUI.LayerField(r, layer, _coloredStyle.ObjectField);
+                    Space(-5);
                 }
             });
-
-            Space6();
 
             return result;
         }
@@ -666,9 +1113,6 @@ namespace DA_Assets.Shared
         {
             Rect position = GUILayoutUtility.GetRect(0, 7, GUILayout.ExpandWidth(true));
 
-            GUIStyle pbarBG = GetStyle(GuiStyle.ProgressBarBg);
-            GUIStyle pbarBody = GetStyle(GuiStyle.ProgressBar);
-
             int controlId = GUIUtility.GetControlID(nameof(TopProgressBar).GetHashCode(), FocusType.Keyboard);
 
             if (Event.current.GetTypeForControl(controlId) == EventType.Repaint)
@@ -677,12 +1121,12 @@ namespace DA_Assets.Shared
                 {
                     Rect barRect = new Rect(position);
                     barRect.width *= value;
-                    pbarBody.Draw(barRect, false, false, false, false);
+                    _coloredStyle.ProgressBar.Draw(barRect, false, false, false, false);
                 }
             }
         }
 
-        public bool LinkLabel(GUIContent label, WidthType widthType, GuiStyle customStyle)
+        public bool LinkLabel(GUIContent label, GUIStyle customStyle, params GUILayoutOption[] options)
         {
             bool clicked = false;
 
@@ -691,28 +1135,19 @@ namespace DA_Assets.Shared
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    GUIStyle style = GetStyle(customStyle);
-
-                    Rect btnRect = default(Rect);
-
-                    switch (widthType)
-                    {
-                        case WidthType.Default:
-                            btnRect = GUILayoutUtility.GetRect(label, style, GUILayout.Width(EditorGUIUtility.labelWidth));
-                            break;
-                        case WidthType.Option:
-                            btnRect = GUILayoutUtility.GetRect(label, style);
-                            break;
-                        case WidthType.Expand:
-                            btnRect = GUILayoutUtility.GetRect(label, style, GUILayout.ExpandWidth(true));
-                            break;
-                    }
-
-                    clicked = GUI.Button(btnRect, label, style);
+                    Rect btnRect = GUILayoutUtility.GetRect(label, customStyle, options);
+                    clicked = GUI.Button(btnRect, label, customStyle);
                 }
             });
 
             return clicked;
+        }
+
+        public void HelpBox(string message, MessageType type)
+        {
+            GUI.backgroundColor = _colorScheme.UnityGuiColor;
+            EditorGUILayout.HelpBox(message, type);
+            GUI.backgroundColor = Color.white;
         }
 
         public bool SquareButton30x30(GUIContent label)
@@ -724,7 +1159,7 @@ namespace DA_Assets.Shared
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    GUIStyle style = GetStyle(GuiStyle.SquareButton30x30);
+                    GUIStyle style = _coloredStyle.SquareButton30x30;
                     Rect btnRect = GUILayoutUtility.GetRect(label, style, GUILayout.ExpandWidth(true));
                     clicked = GUI.Button(btnRect, label, style);
                 }
@@ -742,11 +1177,11 @@ namespace DA_Assets.Shared
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    GUIStyle style = GetStyle(GuiStyle.TabButton);
+                    GUIStyle style = _coloredStyle.TabButton;
 
                     if (tab.Selected)
                     {
-                        GUIStyle pbarBody = GetStyle(GuiStyle.TabSelector);
+                        GUIStyle pbarBody = _coloredStyle.TabSelector;
                         GUILayout.Box(GUIContent.none, pbarBody, GUILayout.Width(4), GUILayout.ExpandHeight(true));
                     }
 
@@ -758,57 +1193,20 @@ namespace DA_Assets.Shared
             return clicked;
         }
 
-        public bool Button(GUIContent label, WidthType widthType, GuiStyle customStyle)
-        {
-            bool clicked = false;
-
-            DrawGroup(new Group
-            {
-                GroupType = GroupType.Horizontal,
-                Body = () =>
-                {
-                    GUIStyle style = GetStyle(customStyle);
-
-                    Rect btnRect;
-
-                    if (widthType == WidthType.Expand)
-                    {
-                        btnRect = GUILayoutUtility.GetRect(label, style, GUILayout.ExpandWidth(true));
-                    }
-                    else
-                    {
-                        btnRect = GUILayoutUtility.GetRect(label, style);
-                    }
-
-                    if (style.fixedWidth > 0)
-                    {
-
-                    }
-                    else if (btnRect.width > 300 && widthType != WidthType.Expand)
-                    {
-                        btnRect.width /= 2;
-                        btnRect.x += btnRect.width / 2;
-                    }
-
-                    clicked = GUI.Button(btnRect, label, style);
-                }
-            });
-
-            return clicked;
-        }
-
         public void BeginScroll(Group group, StackFrame sf)
         {
             string methodPath = GetMethodPath(sf);
             string unicumId = $"{methodPath}-{group.InstanceId}";
 
-            if (groupDatas.TryGetValue(unicumId, out GroupData gd) == false)
+            if (_groupDatas.TryGetValue(unicumId, out GroupData gd) == false)
             {
                 gd = new GroupData();
-                groupDatas.Add(unicumId, gd);
+                _groupDatas.Add(unicumId, gd);
             }
 
+            GUI.backgroundColor = _colorScheme.UnityGuiColor;
             gd.ScrollPosition = EditorGUILayout.BeginScrollView(gd.ScrollPosition, false, false);
+            GUI.backgroundColor = Color.white;
         }
 
         public void EndScroll()
@@ -825,7 +1223,7 @@ namespace DA_Assets.Shared
         }
 
         private List<HamburgerItem> _internalHambBuffer;
-        private int _bufferCount = 0;
+        private Delegate _validatorDelegate;
 
         public void DrawMenu(HamburgerItem menu)
         {
@@ -839,11 +1237,10 @@ namespace DA_Assets.Shared
 
         public void DrawMenu(List<HamburgerItem> buffer, HamburgerItem menu)
         {
-            if (buffer.Count > hamburgerMenuItemsLimit)
+            if (buffer.Count > _hamburgerMenuItemsLimit)
             {
-                Debug.Log($"_bufferCount: {buffer.Count}, limit: {hamburgerMenuItemsLimit}");
-                buffer = buffer.GetRange(hamburgerMenuItemsLimit / 2, hamburgerMenuItemsLimit - 1);
-                Debug.Log($"_bufferCount after GetRange: {buffer.Count}");
+                int itemsToRemove = buffer.Count - _hamburgerMenuItemsLimit;
+                buffer.RemoveRange(0, itemsToRemove);
             }
 
             int index = buffer.FindIndex(x => x.Id == menu.Id);
@@ -851,34 +1248,26 @@ namespace DA_Assets.Shared
             if (index < 0)
             {
                 buffer.Add(menu);
-                index = 0;
+                index = buffer.Count - 1;
             }
 
-            GUILayout.BeginHorizontal(GetStyle(GuiStyle.HambugerButtonBg));
+            GUILayout.BeginHorizontal(_coloredStyle.HambugerButtonBg);
 
             if (buffer[index].Fade == null)
             {
-                buffer[index].Fade = new AnimBool(false);
-                buffer[index].Fade.speed = 4f;
+                buffer[index].Fade = new AnimBool(false)
+                {
+                    speed = 4f
+                };
             }
 
             if (menu.Body != null)
             {
-                Texture2D t2d;
-
-                if (buffer[index].Fade.value)
-                {
-                    t2d = resources.ImgExpandOpened;
-                }
-                else
-                {
-                    t2d = resources.ImgExpandClosed;
-                }
-
-                GUILayout.Button(t2d, GetStyle(GuiStyle.HamburgerExpandButton));
+                Texture2D t2d = buffer[index].Fade.value ? _data.Resources.ImgExpandOpened : _data.Resources.ImgExpandClosed;
+                GUILayout.Button(t2d, _coloredStyle.HamburgerExpandButton);
             }
 
-            Rect btnRect = GUILayoutUtility.GetRect(menu.GUIContent, GetStyle(GuiStyle.HamburgerButton), GUILayout.ExpandWidth(true));
+            Rect btnRect = GUILayoutUtility.GetRect(menu.GUIContent, _coloredStyle.HamburgerButton, GUILayout.ExpandWidth(true));
             btnRect.x += 15;
             btnRect.width -= 46;
 
@@ -896,12 +1285,9 @@ namespace DA_Assets.Shared
                 smallBtnRect.height = 20;
                 smallBtnRect.x -= 15;
 
-                GUIStyle style;
-
-                if (menu.ButtonGuiContent.image == null)
-                    style = GetStyle(GuiStyle.HabmurgerTextSubButton);
-                else
-                    style = GetStyle(GuiStyle.HabmurgerImageSubButton);
+                GUIStyle style = menu.ButtonGuiContent.image == null
+                    ? _coloredStyle.HamburgerTextSubButton
+                    : _coloredStyle.HamburgerImageSubButton;
 
                 if (GUI.Button(smallBtnRect, menu.ButtonGuiContent, style))
                     menu.OnButtonClick.Invoke();
@@ -918,13 +1304,13 @@ namespace DA_Assets.Shared
                 else
                     cbRect.x -= 1;
 
-                GUI.backgroundColor = (Color)Color.gray;
+                GUI.backgroundColor = _colorScheme.CheckBoxColor;
 
                 buffer[index].CheckBoxValue.Value = HamburgerToggle(
                     cbRect,
                     buffer[index].CheckBoxValue.Value);
 
-                GUI.backgroundColor = (Color)Color.white;
+                GUI.backgroundColor = Color.white;
 
                 if (buffer[index].CheckBoxValue.Value != buffer[index].CheckBoxValue.Temp)
                 {
@@ -955,7 +1341,7 @@ namespace DA_Assets.Shared
                                     Fade = buffer[index].Fade,
                                     Body = () =>
                                     {
-                                        Space6();
+                                        Space(6);
                                         menu.Body.Invoke();
                                     }
                                 });
@@ -968,7 +1354,7 @@ namespace DA_Assets.Shared
             }
         }
 
-        public T EnumField<T>(GUIContent label, T @enum, bool uppercase = true, string[] itemNames = null, Action<T> onChange = null)
+        public T EnumField<T>(GUIContent content, T @enum, bool uppercase = true, string[] itemNames = null, Action<T> onChange = null)
         {
             List<int> enumValues = Enum.GetValues(@enum.GetType()).Cast<int>().ToList();
 
@@ -984,13 +1370,6 @@ namespace DA_Assets.Shared
                     itemNames[i] = Regex.Replace(itemNames[i], "(\\B[A-Z])", "$1").ToUpper();
                 }
             }
-            else
-            {
-                for (int i = 0; i < itemNames.Length; i++)
-                {
-                    itemNames[i] = itemNames[i].Replace("_", " ");
-                }
-            }
 
             int result = 0;
 
@@ -999,17 +1378,15 @@ namespace DA_Assets.Shared
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    if (label != null)
-                    {
-                        Label(label);
-                    }
+                    Label12px(content);
+                    Space10();
+                    FlexibleSpace();
 
-                    int _result2 = EditorGUILayout.Popup(enumValues.IndexOf(Convert.ToInt32(@enum)), itemNames, GetStyle(GuiStyle.TextField));
+                    Rect popupRect = GUILayoutUtility.GetRect(_coloredStyle.ObjectField.fixedWidth, _coloredStyle.ObjectField.fixedHeight);
+                    int _result2 = EditorGUI.Popup(popupRect, enumValues.IndexOf(Convert.ToInt32(@enum)), itemNames, _coloredStyle.ObjectField);
                     result = enumValues[_result2];
                 }
             });
-
-            Space6();
 
             T _result = (T)(object)result;
 
@@ -1017,7 +1394,7 @@ namespace DA_Assets.Shared
             {
                 onChange?.Invoke(_result);
             }
-
+            DrawDropDownIcon();
             return _result;
         }
 
@@ -1039,7 +1416,6 @@ namespace DA_Assets.Shared
                     // Check if the mouse is within the drag zone
                     if (dragZone.Contains(currentEvent.mousePosition))
                     {
-                        // Start the drag operation
                         GUIUtility.hotControl = controlID;
                         currentEvent.Use();
                     }
@@ -1066,10 +1442,36 @@ namespace DA_Assets.Shared
             }
         }
 
-        public string DrawSelectPathField(string selectedPath, GUIContent label, GUIContent btnLabel, string folderPanelText)
+        public string FileField(GUIContent content, string selectedPath, GUIContent btnLabel, string folderPanelText)
         {
             TextField(
-               label,
+               content,
+               selectedPath,
+               btnLabel,
+               () =>
+               {
+                   string _selectedPath = EditorUtility.OpenFilePanel(folderPanelText, "", "");
+
+                   if (string.IsNullOrWhiteSpace(_selectedPath) == false)
+                   {
+                       if (IsPathInsideAssetsPath(_selectedPath))
+                       {
+                           selectedPath = _selectedPath;
+                       }
+                       else
+                       {
+                           //Console.LogError(FcuLocKey.label_inside_assets_folder.Localize());
+                       }
+                   }
+               });
+
+            return ToRelativePath(selectedPath);
+        }
+
+        public string FolderField(GUIContent content, string selectedPath, GUIContent btnLabel, string folderPanelText)
+        {
+            TextField(
+               content,
                selectedPath,
                btnLabel,
                () =>
@@ -1112,46 +1514,101 @@ namespace DA_Assets.Shared
             return absolutePath;
         }
 
+        public void Label10px(string label, string tooltip = null, params GUILayoutOption[] options)
+        {
+            Label10px(new GUIContent(label, tooltip), options);
+        }
 
-        public void Label10px(string label, string tooltip = null, WidthType widthType = WidthType.Default) =>
-            Label(new GUIContent(label, tooltip), widthType, GuiStyle.Label10px);
+        public void Label10px(GUIContent content, params GUILayoutOption[] options)
+        {
+            GUILayout.Label(content, _coloredStyle.Label10px, GUILayout.Height(20));
+        }
 
-        public void Label12px(string label, string tooltip = null, WidthType widthType = WidthType.Default) =>
-            Label(new GUIContent(label, tooltip), widthType, GuiStyle.Label12px);
+        public void Label12px(string label, string tooltip = null, params GUILayoutOption[] options)
+        {
+            Label12px(new GUIContent(label, tooltip), options);
+        }
 
-        public void RedLinkLabel10px(string label, string tooltip = null, WidthType widthType = WidthType.Default) =>
-            LinkLabel(new GUIContent(label, tooltip), widthType, GuiStyle.RedLabel10px);
+        public void Label12px(GUIContent content, params GUILayoutOption[] options)
+        {
+            if (content != null)
+            {
+                Vector2 textSize = _coloredStyle.Label12px.CalcSize(content);
+                var combinedOptions = options.Concat(new GUILayoutOption[] { GUILayout.Height(20), GUILayout.Width(textSize.x) }).ToArray();
+                GUILayout.Label(content, _coloredStyle.Label12px, combinedOptions);
+            }
+        }
 
-        public void BlueLinkLabel10px(string label, string tooltip = null, WidthType widthType = WidthType.Default) =>
-            LinkLabel(new GUIContent(label, tooltip), widthType, GuiStyle.BlueLabel10px);
+        public void RedLinkLabel10px(GUIContent content, params GUILayoutOption[] options)
+        {
+            var combinedOptions = options.Concat(new GUILayoutOption[] { GUILayout.Height(20) }).ToArray();
+            GUILayout.Label(content, _coloredStyle.RedLabel10px, combinedOptions);
+        }
 
-        public bool SectionHeader(string label, string tooltip = null) =>
-            Button(new GUIContent(label, tooltip), WidthType.Expand, GuiStyle.SectionHeader);
+        public void BlueLinkLabel10px(GUIContent content, params GUILayoutOption[] options)
+        {
+            GUILayout.Label(content, _coloredStyle.BlueLabel10px, GUILayout.Height(20));
+        }
 
-        public bool OutlineButton(string label, string tooltip = null, WidthType expand = WidthType.Default) =>
-            Button(new GUIContent(label, tooltip), expand, GuiStyle.OutlineButton);
+        public void SectionHeader(string label, string tooltip = null)
+        {
+            GUILayout.Label(new GUIContent(label, tooltip), _coloredStyle.SectionHeader, GUILayout.ExpandWidth(true));
+        }
 
-        public bool LinkButton(string label, string tooltip = null, WidthType expand = WidthType.Default) =>
-            Button(new GUIContent(label, tooltip), expand, GuiStyle.LinkButton);
+        public void TabHeader(string label, string tooltip = null, float paddingTop = -9)
+        {
+            RectOffset stylePadding = _coloredStyle.SectionHeader.padding;
+            float totalPaddingTop = paddingTop + stylePadding.top;
+            GUILayout.BeginVertical();
+            GUILayout.Space(totalPaddingTop);
+            GUILayout.Label(new GUIContent(label, tooltip), _coloredStyle.SectionHeader, GUILayout.ExpandWidth(true));
+            GUILayout.EndVertical();
+        }
+
+        public bool Button(GUIContent label, GUIStyle style, bool expand)
+        {
+            bool clicked = false;
+
+            DrawGroup(new Group
+            {
+                GroupType = GroupType.Horizontal,
+                Body = () =>
+                {
+                    GUILayoutOption[] options;
+                    if (expand)
+                    {
+                        options = new GUILayoutOption[] { GUILayout.ExpandWidth(true) };
+                    }
+                    else
+                    {
+                        Vector2 textSize = _coloredStyle.Label12px.CalcSize(label);
+                        options = new GUILayoutOption[] { GUILayout.Width(textSize.x + 20) };
+                    }
+
+                    clicked = GUILayout.Button(label, style, options);
+                }
+            });
+
+            return clicked;
+        }
 
 
+        public bool OutlineButton(string label, string tooltip = null, bool expand = false) =>
+            OutlineButton(new GUIContent(label, tooltip), expand);
 
-        public int SPACE_10 => 10;
-        public int SPACE_5 => 5;
-        public int SPACE_6 => 6;
-        public int SPACE_15 => 15;
-        public int SPACE_30 => 30;
-        public int SPACE_60 => 60;
+        public bool OutlineButton(GUIContent content, bool expand = false) =>
+            Button(content, _coloredStyle.OutlineButton, expand);
 
-        public void Space60() => GUILayout.Space(SPACE_60);
-        public void Space30() => GUILayout.Space(SPACE_30);
-        public void Space15() => GUILayout.Space(SPACE_15);
+        public bool LinkButton(GUIContent content, bool expand) =>
+            Button(content, _coloredStyle.LinkButton, expand);
 
-        public void Space5() => GUILayout.Space(SPACE_5);
-        public void FlexibleSpace() => GUILayout.FlexibleSpace();
+        public void Space60() => GUILayout.Space(60);
+        public void Space30() => GUILayout.Space(30);
+        public void Space15() => GUILayout.Space(15);
+        public void Space10() => GUILayout.Space(10);
+        public void Space5() => GUILayout.Space(5);
         public void Space(float pixels) => GUILayout.Space(pixels);
-
-
+        public void FlexibleSpace() => GUILayout.FlexibleSpace();
 
         private SerializedProperty GetPropertyRecursive(string[] names, int index, SerializedProperty property)
         {
@@ -1162,11 +1619,11 @@ namespace DA_Assets.Shared
             else
             {
                 string fieldName = names[index];
-                //Debug.Log($"{fieldName} | {property}");
                 SerializedProperty rprop = property.FindPropertyRelative(fieldName);
                 return GetPropertyRecursive(names, index + 1, rprop);
             }
         }
+
         public IEnumerable<SerializedProperty> GetChildren(SerializedProperty property)
         {
             property = property.Copy();
@@ -1194,6 +1651,7 @@ namespace DA_Assets.Shared
                 }
             }
         }
+
         public void DrawChildProperty<T>(SerializedObject so, SerializedProperty parentElement, Expression<Func<T, object>> pathExpression)
         {
             SerializedProperty targetGraphic = GetChildProperty(parentElement, pathExpression);
@@ -1205,6 +1663,7 @@ namespace DA_Assets.Shared
 
             DrawProperty(so, targetGraphic);
         }
+
         public SerializedProperty GetPropertyFromArray<T>(SerializedProperty arrayProperty, int elementIndex)
         {
             if (arrayProperty?.arraySize > 0 && arrayProperty.arraySize >= elementIndex + 1)
@@ -1214,6 +1673,7 @@ namespace DA_Assets.Shared
 
             return null;
         }
+
         public SerializedProperty GetChildProperty<T>(SerializedProperty arrayProperty, Expression<Func<T, object>> pathExpression)
         {
             try
@@ -1226,12 +1686,12 @@ namespace DA_Assets.Shared
                 return null;
             }
         }
-        public void DrawProperty(SerializedObject so, SerializedProperty property, bool darkTheme = true)
+
+        public void DrawProperty(SerializedObject so, SerializedProperty property)
         {
             DrawGroup(new Group
             {
                 GroupType = GroupType.Horizontal,
-                DarkBg = darkTheme,
                 Body = () =>
                 {
                     Space15();
@@ -1239,7 +1699,6 @@ namespace DA_Assets.Shared
                     DrawGroup(new Group
                     {
                         GroupType = GroupType.Vertical,
-                        DarkBg = darkTheme,
                         Body = () =>
                         {
                             so.Update();
@@ -1260,7 +1719,13 @@ namespace DA_Assets.Shared
             });
         }
 
-        public void SerializedPropertyField<T>(SerializedObject so, Expression<Func<T, object>> pathExpression, bool darkTheme = true, bool? isExpanded = null)
+        public static string GetFieldName<T>(Expression<Func<T, object>> pathExpression)
+        {
+            string[] fields = pathExpression.GetFieldsArray();
+            return fields.Last();
+        }
+
+        public void SerializedPropertyField<T>(SerializedObject so, Expression<Func<T, object>> pathExpression, bool? isExpanded = null)
         {
             string[] fields = pathExpression.GetFieldsArray();
 
@@ -1269,12 +1734,11 @@ namespace DA_Assets.Shared
                 GroupType = GroupType.Horizontal,
                 Body = () =>
                 {
-                    Space(SPACE_15 - 1);
+                    Space(14);
 
                     DrawGroup(new Group
                     {
                         GroupType = GroupType.Vertical,
-                        DarkBg = darkTheme,
                         Body = () =>
                         {
                             SerializedProperty rootProperty = so.FindProperty(fields[0]);
@@ -1286,7 +1750,13 @@ namespace DA_Assets.Shared
                             }
 
                             so.Update();
+
+                            GUI.backgroundColor = _colorScheme.UnityGuiColor;
+                            EditorGUI.indentLevel--;
                             EditorGUILayout.PropertyField(lastProperty, true);
+                            EditorGUI.indentLevel++;
+                            GUI.backgroundColor = Color.white;
+
                             so.ApplyModifiedProperties();
                         }
                     });
@@ -1294,26 +1764,158 @@ namespace DA_Assets.Shared
             });
         }
 
-        internal void DrawMenu(object selectableHamburgerItems, HamburgerItem hamburgerItem)
+        public void Colorize(Action action)
         {
-            throw new NotImplementedException();
-        }
-    }
-
-    public delegate void UITabContent();
-
-    public class UITab
-    {
-        public UITab(string label, string tooltip, UITabContent content, int? labelWidth = null)
-        {
-            this.Label = new GUIContent(label, DAInspector.Instance.Resources.IconSettings, tooltip);
-            this.Content = content;
-            this.LabelWidth = labelWidth;
+            GUI.backgroundColor = _colorScheme.UnityGuiColor;
+            action.Invoke();
+            GUI.backgroundColor = Color.white;
         }
 
-        public GUIContent Label { get; set; }
-        public UITabContent Content { get; set; }
-        public int? LabelWidth { get; set; }
-        public bool Selected { get; set; }
+        public void VerticalSeparator()
+        {
+            GUILayout.Box(GUIContent.none, _coloredStyle.HorizontalSeparator, GUILayout.Width(1), GUILayout.ExpandHeight(true));
+        }
+
+        public bool Button(GUIContent content, GUILayoutOption options)
+        {
+            GUI.backgroundColor = _colorScheme.OutlineColor;
+            bool value = GUILayout.Button(content, options);
+            GUI.backgroundColor = Color.white;
+            return value;
+        }
+
+        public void DrawObjectFields(object target)
+        {
+            Type targetType = target.GetType();
+            PropertyInfo[] properties = targetType.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+            PropertyHeader headerAttribute = targetType.GetCustomAttribute<PropertyHeader>();
+            if (headerAttribute != null)
+            {
+                SectionHeader(headerAttribute.HeaderLabel.text, headerAttribute.HeaderLabel.tooltip);
+                Space10();
+            }
+
+            for (int i = 0; i < properties.Length; i++)
+            {
+                PropertyInfo property = properties[i];
+
+                CustomInspectorProperty attribute = property.GetCustomAttribute<CustomInspectorProperty>();
+                if (attribute == null) continue;
+
+                if (!property.CanRead || !property.CanWrite)
+                    continue;
+
+                EditorGUI.BeginChangeCheck();
+                object currentValue = property.GetValue(target);
+                Type valueType = currentValue?.GetType();
+
+                object newValue = null;
+
+                switch (attribute.Type)
+                {
+                    case ComponentType.Toggle:
+                        newValue = Toggle(attribute.Label, (bool)currentValue);
+                        break;
+                    case ComponentType.EnumField:
+                        newValue = EnumField(attribute.Label, Convert.ChangeType(currentValue, property.PropertyType));
+                        break;
+                    case ComponentType.FloatField:
+                        newValue = FloatField(attribute.Label, (float)currentValue);
+                        break;
+                    case ComponentType.TextField:
+                        newValue = TextField(attribute.Label, (string)currentValue);
+                        break;
+                    case ComponentType.IntField:
+                        newValue = IntField(attribute.Label, (int)currentValue);
+                        break;
+                    case ComponentType.Vector2Field:
+                        newValue = Vector2Field(attribute.Label, (Vector2)currentValue);
+                        break;
+                    case ComponentType.Vector2IntField:
+                        newValue = Vector2IntField(attribute.Label, (Vector2Int)currentValue);
+                        break;
+                    case ComponentType.Vector4Field:
+                        newValue = Vector4Field(attribute.Label, (Vector4)currentValue);
+                        break;
+                    case ComponentType.ColorField:
+                        newValue = ColorField(attribute.Label, (Color)currentValue);
+                        break;
+                    case ComponentType.SliderField:
+                        if (valueType == typeof(int))
+                        {
+                            newValue = SliderField(attribute.Label, (int)currentValue, attribute.MinValue, attribute.MaxValue);
+                        }
+                        else if (valueType == typeof(float))
+                        {
+                            newValue = SliderField(attribute.Label, (float)currentValue, attribute.MinValue, attribute.MaxValue);
+                        }
+                        else
+                        {
+                            HelpBox($"Missing '{attribute.Label.text}' field.", MessageType.Warning);
+                        }
+                        break;
+                    default:
+                        HelpBox($"Missing '{attribute.Label.text}' field.", MessageType.Warning);
+                        break;
+                }
+
+                Space10();
+
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Type fieldType = property.PropertyType;
+
+                    if (fieldType == typeof(int))
+                    {
+                        property.SetValue(target, Convert.ToInt32(newValue));
+                    }
+                    else if (fieldType == typeof(float))
+                    {
+                        property.SetValue(target, Convert.ToSingle(newValue));
+                    }
+                    else if (fieldType == typeof(double))
+                    {
+                        property.SetValue(target, Convert.ToDouble(newValue));
+                    }
+                    else if (fieldType == typeof(long))
+                    {
+                        property.SetValue(target, Convert.ToInt64(newValue));
+                    }
+                    else if (fieldType == typeof(short))
+                    {
+                        property.SetValue(target, Convert.ToInt16(newValue));
+                    }
+                    else if (fieldType == typeof(byte))
+                    {
+                        property.SetValue(target, Convert.ToByte(newValue));
+                    }
+                    else if (fieldType == typeof(decimal))
+                    {
+                        property.SetValue(target, Convert.ToDecimal(newValue));
+                    }
+                    else if (fieldType == typeof(uint))
+                    {
+                        property.SetValue(target, Convert.ToUInt32(newValue));
+                    }
+                    else if (fieldType == typeof(ulong))
+                    {
+                        property.SetValue(target, Convert.ToUInt64(newValue));
+                    }
+                    else if (fieldType == typeof(ushort))
+                    {
+                        property.SetValue(target, Convert.ToUInt16(newValue));
+                    }
+                    else if (fieldType == typeof(sbyte))
+                    {
+                        property.SetValue(target, Convert.ToSByte(newValue));
+                    }
+                    else
+                    {
+                        property.SetValue(target, newValue);
+                    }
+                }
+            }
+        }
     }
 }

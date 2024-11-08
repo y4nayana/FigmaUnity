@@ -1,5 +1,5 @@
-﻿using DA_Assets.FCU.Model;
-using DA_Assets.Shared;
+﻿using DA_Assets.DAI;
+using DA_Assets.FCU.Model;
 using UnityEditor;
 using UnityEngine;
 
@@ -9,7 +9,7 @@ namespace DA_Assets.FCU
     {
         private static Vector2 windowSize = new Vector2(410, 290);
         private SyncHelper sh1, sh2;
-        private DAInspector gui => DAInspector.Instance;
+        private DAInspector gui => BlackInspector.Instance.Inspector;
 
         public static void Show(SyncHelper sh1, SyncHelper sh2)
         {
@@ -34,7 +34,7 @@ namespace DA_Assets.FCU
             gui.DrawGroup(new Group
             {
                 GroupType = GroupType.Vertical,
-                Style = GuiStyle.TabBg2,
+                Style = gui.ColoredStyle.TabBg2,
                 Scroll = true,
                 Body = () =>
                 {
@@ -56,7 +56,7 @@ namespace DA_Assets.FCU
 
                                     gui.Space5();
 
-                                    if (gui.OutlineButton(FcuLocKey.label_copy_to_clipboard.Localize(), expand: WidthType.Expand))
+                                    if (gui.OutlineButton(FcuLocKey.label_copy_to_clipboard.Localize(), null, true))
                                     {
                                         GUIUtility.systemCopyBuffer = sh1.Data.HashDataTree;
                                     }
@@ -74,7 +74,7 @@ namespace DA_Assets.FCU
 
                                     gui.Space5();
 
-                                    if (gui.OutlineButton(FcuLocKey.label_copy_to_clipboard.Localize(), expand: WidthType.Expand))
+                                    if (gui.OutlineButton(FcuLocKey.label_copy_to_clipboard.Localize(), null, true))
                                     {
                                         GUIUtility.systemCopyBuffer = sh2.Data.HashDataTree;
                                     }
@@ -85,7 +85,7 @@ namespace DA_Assets.FCU
 
                     gui.Space5();
 
-                    if (gui.OutlineButton(FcuLocKey.label_open_diff_checker.Localize(), expand: WidthType.Expand))
+                    if (gui.OutlineButton(FcuLocKey.label_open_diff_checker.Localize(), null, true))
                     {
                         Application.OpenURL($"https://www.diffchecker.com/");
                     }
